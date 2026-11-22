@@ -4,6 +4,14 @@ const mockTxGet = vi.fn();
 const mockTxUpdate = vi.fn();
 const mockTxDelete = vi.fn();
 
+vi.mock('../../firebase', async () => {
+  const actual = await vi.importActual<typeof import('../../firebase')>('../../firebase');
+  return {
+    ...actual,
+    db: { __mockDb: true },
+  };
+});
+
 vi.mock('firebase/firestore', async () => {
   const actual = await vi.importActual<typeof import('firebase/firestore')>('firebase/firestore');
   return {

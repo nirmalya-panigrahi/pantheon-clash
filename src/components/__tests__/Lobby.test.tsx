@@ -7,6 +7,7 @@ import { Lobby } from '../Lobby';
 
 function makeAuthState(overrides: Partial<AuthState> = {}): AuthState {
   return {
+    isConfigured: true,
     user: null,
     displayName: 'Guest',
     loading: false,
@@ -123,5 +124,33 @@ describe('Lobby component', () => {
     const joinBtn = screen.getByRole('button', { name: /join match/i });
     await user.click(joinBtn);
     expect(onJoinMultiplayer).toHaveBeenCalledWith('match-other');
+  });
+
+  it('Red Pill: hides auth buttons and explains offline mode when no Firebase API key is configured', () => {
+    const authState = makeAuthState({ isConfigured: false });
+
+    render(
+      <Lobby
+        authState={authState}
+        lobbies={[]}
+        lobbiesLoading={false}
+        lobbiesError={null}
+        sweptCount={0}
+        creatingMatch={false}
+        joiningMatchId={null}
+        lobbyActionError={null}
+        onStartSolo={vi.fn()}
+        onCreateMultiplayer={vi.fn()}
+        onJoinMultiplayer={vi.fn()}
+        onSweepStale={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText(/online multiplayer disabled on this static build/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /sign in with google/i }),
+    ).not.toBeInTheDocument();
   });
 });

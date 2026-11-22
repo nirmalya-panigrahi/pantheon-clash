@@ -191,10 +191,12 @@ export default function App() {
         <Header
           screen={screen}
           hasActiveMatch={activeMode !== 'none'}
+          isFirebaseConfigured={authState.isConfigured}
           isSignedIn={Boolean(authState.user)}
           signingIn={authState.signingIn}
           onNavigate={setScreen}
           onAuthAction={handleHeaderAuthAction}
+          onQuickSolo={() => handleStartSolo(202601)}
         />
 
         <div className="flex-1">

@@ -212,7 +212,21 @@ export function Lobby({
               </div>
             )}
 
-            {!authState.user ? (
+            {!authState.isConfigured ? (
+              <div className="rounded-lg bg-[#0E1117] border border-white/10 p-5 space-y-3">
+                <div className="flex items-start gap-3">
+                  <Shield className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
+                  <div className="space-y-1.5">
+                    <p className="text-sm font-semibold text-stone-100">
+                      Online multiplayer disabled on this static build
+                    </p>
+                    <p className="text-xs text-stone-400 leading-relaxed">
+                      No Firebase Web API key is bundled in the public repository or GitHub Pages build. Play Solo Match vs Bot, browse the 60-card Codex, or supply <code className="font-mono text-stone-300">VITE_FIREBASE_API_KEY</code> in your local <code className="font-mono text-stone-300">.env.local</code> to enable online lobbies.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : !authState.user ? (
               <div className="rounded-lg bg-[#0E1117] border border-white/10 p-5 space-y-4">
                 <div className="flex items-start gap-3">
                   <Shield className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />

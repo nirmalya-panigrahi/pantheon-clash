@@ -1,19 +1,40 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, type FirebaseApp } from 'firebase/app';
 import {
   GoogleAuthProvider,
   getAuth,
   signInAnonymously,
   signInWithPopup,
   signOut,
+  type Auth,
   type User,
 } from 'firebase/auth';
-import { doc, getDocFromServer, getFirestore } from 'firebase/firestore';
-import firebaseConfig from '../firebase-applet-config.json';
+import { doc, getDocFromServer, getFirestore, type Firestore } from 'firebase/firestore';
 
-const app = initializeApp(firebaseConfig);
+export const FIREBASE_PROJECT_ID = 'trans-girder-w91ww';
+export const FIRESTORE_DATABASE_ID =
+  'ai-studio-android-tactical-bf2dc554-7747-49b7-86a8-8f7272fe236a';
 
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-export const auth = getAuth(app);
+const runtimeApiKey = import.meta.env.VITE_FIREBASE_API_KEY?.trim() ?? '';
+
+export const isFirebaseConfigured = runtimeApiKey.length > 0;
+
+let app: FirebaseApp | null = null;
+export let db: Firestore | null = null;
+export let auth: Auth | null = null;
+
+if (isFirebaseConfigured) {
+  app = initializeApp({
+    apiKey: runtimeApiKey,
+    authDomain: `${FIREBASE_PROJECT_ID}.firebaseapp.com`,
+    projectId: FIREBASE_PROJECT_ID,
+    storageBucket: `${FIREBASE_PROJECT_ID}.firebasestorage.app`,
+    messagingSenderId: '885340292054',
+    appId: '1:885340292054:web:6a3f90c33b689c31ec9a77',
+  });
+  db = getFirestore(app, FIRESTORE_DATABASE_ID);
+  auth = getAuth(app);
+}
+
 export const googleProvider = new GoogleAuthProvider();
 
 export enum OperationType {
@@ -50,13 +71,13 @@ export function handleFirestoreError(
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
+      userId: auth?.currentUser?.uid,
+      email: auth?.currentUser?.email,
+      emailVerified: auth?.currentUser?.emailVerified,
+      isAnonymous: auth?.currentUser?.isAnonymous,
+      tenantId: auth?.currentUser?.tenantId,
       providerInfo:
-        auth.currentUser?.providerData?.map((provider) => ({
+        auth?.currentUser?.providerData?.map((provider) => ({
           providerId: provider.providerId,
           email: provider.email,
         })) || [],
@@ -69,6 +90,7 @@ export function handleFirestoreError(
 }
 
 export async function testConnection(): Promise<boolean> {
+  if (!db) return false;
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
     return true;
@@ -81,19 +103,28 @@ export async function testConnection(): Promise<boolean> {
   }
 }
 
-void testConnection();
+if (isFirebaseConfigured) {
+  void testConnection();
+}
 
 export async function signInWithGoogle(): Promise<User> {
+  if (!auth) {
+    throw new Error('Online multiplayer is disabled because no Firebase API key is configured.');
+  }
   const result = await signInWithPopup(auth, googleProvider);
   return result.user;
 }
 
 export async function signInAsGuest(): Promise<User> {
+  if (!auth) {
+    throw new Error('Online multiplayer is disabled because no Firebase API key is configured.');
+  }
   const result = await signInAnonymously(auth);
   return result.user;
 }
 
 export async function signOutUser(): Promise<void> {
+  if (!auth) return;
   await signOut(auth);
 }
 

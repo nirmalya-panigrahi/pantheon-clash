@@ -3,19 +3,23 @@ export type AppScreen = 'lobby' | 'arena' | 'codex' | 'rules';
 interface HeaderProps {
   screen: AppScreen;
   hasActiveMatch: boolean;
+  isFirebaseConfigured: boolean;
   isSignedIn: boolean;
   signingIn: boolean;
   onNavigate: (screen: AppScreen) => void;
   onAuthAction: () => void;
+  onQuickSolo: () => void;
 }
 
 export function Header({
   screen,
   hasActiveMatch,
+  isFirebaseConfigured,
   isSignedIn,
   signingIn,
   onNavigate,
   onAuthAction,
+  onQuickSolo,
 }: HeaderProps) {
   const navItems: { id: AppScreen; label: string }[] = [
     { id: 'lobby', label: 'Lobby' },
@@ -56,14 +60,24 @@ export function Header({
         </nav>
 
         <div className="shrink-0">
-          <button
-            type="button"
-            disabled={signingIn}
-            onClick={onAuthAction}
-            className="px-4 py-2 min-h-[40px] rounded-lg bg-amber-600 hover:bg-amber-500 text-stone-950 font-semibold text-xs sm:text-sm transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-amber-400"
-          >
-            {signingIn ? 'Signing In...' : isSignedIn ? 'Sign Out' : 'Sign In'}
-          </button>
+          {isFirebaseConfigured ? (
+            <button
+              type="button"
+              disabled={signingIn}
+              onClick={onAuthAction}
+              className="px-4 py-2 min-h-[40px] rounded-lg bg-amber-600 hover:bg-amber-500 text-stone-950 font-semibold text-xs sm:text-sm transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-amber-400"
+            >
+              {signingIn ? 'Signing In...' : isSignedIn ? 'Sign Out' : 'Sign In'}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onQuickSolo}
+              className="px-4 py-2 min-h-[40px] rounded-lg bg-amber-600 hover:bg-amber-500 text-stone-950 font-semibold text-xs sm:text-sm transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-amber-400"
+            >
+              Solo Duel
+            </button>
+          )}
         </div>
       </div>
     </header>

@@ -3,12 +3,14 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   auth,
   formatPlayerName,
+  isFirebaseConfigured,
   signInAsGuest,
   signInWithGoogle,
   signOutUser,
 } from '../firebase';
 
 export interface AuthState {
+  isConfigured: boolean;
   user: User | null;
   displayName: string;
   loading: boolean;
@@ -37,11 +39,15 @@ function mapAuthError(error: unknown): string {
 
 export function useAuth(): AuthState {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(isFirebaseConfigured);
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!isFirebaseConfigured || !auth) {
+      setLoading(false);
+      return;
+    }
     const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser);
       setLoading(false);
@@ -85,6 +91,7 @@ export function useAuth(): AuthState {
   const clearError = useCallback(() => setError(null), []);
 
   return {
+    isConfigured: isFirebaseConfigured,
     user,
     displayName: formatPlayerName(user),
     loading,

@@ -10,6 +10,7 @@ import {
   setDoc,
   Timestamp,
   where,
+  type Firestore,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { createInitialMatchState } from '../engine/gameEngine';
@@ -18,6 +19,13 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import type { FirestoreMatchDocument, MatchState } from '../types/game';
 
 export const STALE_LOBBY_AGE_MS = 2 * 60 * 60 * 1000;
+
+function requireDb(): Firestore {
+  if (!db) {
+    throw new Error('Online multiplayer is disabled because no Firebase API key is configured.');
+  }
+  return db;
+}
 
 export function generateMatchId(seed: number): string {
   const timePart = Date.now().toString(36);
@@ -35,6 +43,7 @@ export async function createMatchLobby(
   hostName: string,
   matchSeed: number,
 ): Promise<string> {
+  const firestore = requireDb();
   const seed = normalizeSeed(matchSeed);
   const matchId = generateMatchId(seed);
   const path = `matches/${matchId}`;
@@ -54,7 +63,7 @@ export async function createMatchLobby(
   };
 
   try {
-    await setDoc(doc(db, 'matches', matchId), payload);
+    await setDoc(doc(firestore, 'matches', matchId), payload);
     return matchId;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, path);
@@ -66,11 +75,12 @@ export async function joinMatchLobby(
   guestUid: string,
   guestName: string,
 ): Promise<void> {
+  const firestore = requireDb();
   const path = `matches/${matchId}`;
-  const matchRef = doc(db, 'matches', matchId);
+  const matchRef = doc(firestore, 'matches', matchId);
 
   try {
-    await runTransaction(db, async (tx) => {
+    await runTransaction(firestore, async (tx) => {
       const snap = await tx.get(matchRef);
       if (!snap.exists()) {
         throw new Error('Match lobby no longer exists.');
@@ -110,11 +120,12 @@ export async function commitMatchState(
   matchId: string,
   nextState: MatchState,
 ): Promise<void> {
+  const firestore = requireDb();
   const path = `matches/${matchId}`;
-  const matchRef = doc(db, 'matches', matchId);
+  const matchRef = doc(firestore, 'matches', matchId);
 
   try {
-    await runTransaction(db, async (tx) => {
+    await runTransaction(firestore, async (tx) => {
       const snap = await tx.get(matchRef);
       if (!snap.exists()) {
         throw new Error('Match document was closed.');
@@ -150,12 +161,13 @@ export async function commitMatchState(
  * Deletes `matches/{matchId}` atomically if `activePlayers` becomes empty.
  */
 export async function leaveMatchSession(matchId: string, uid: string): Promise<void> {
-  if (!matchId || !uid) return;
+  if (!matchId || !uid || !db) return;
+  const firestore = db;
   const path = `matches/${matchId}`;
-  const matchRef = doc(db, 'matches', matchId);
+  const matchRef = doc(firestore, 'matches', matchId);
 
   try {
-    await runTransaction(db, async (tx) => {
+    await runTransaction(firestore, async (tx) => {
       const snap = await tx.get(matchRef);
       if (!snap.exists()) {
         return;
@@ -205,6 +217,7 @@ export function isLobbyStale(createdAt: unknown, nowMs = Date.now()): boolean {
  * Client-side sweep removing waiting lobbies older than 2 hours.
  */
 export async function sweepStaleLobbies(nowMs = Date.now()): Promise<number> {
+  if (!db) return 0;
   const matchesCol = collection(db, 'matches');
   const waitingQuery = query(matchesCol, where('status', '==', 'waiting'));
   let removed = 0;
@@ -239,7 +252,8 @@ export function subscribeWaitingLobbies(
   onUpdate: (lobbies: FirestoreMatchDocument[]) => void,
   onError: (err: Error) => void,
 ): Unsubscribe {
-  const waitingQuery = query(collection(db, 'matches'), where('status', '==', 'waiting'));
+  const firestore = requireDb();
+  const waitingQuery = query(collection(firestore, 'matches'), where('status', '==', 'waiting'));
   return onSnapshot(
     waitingQuery,
     (snapshot) => {
@@ -269,9 +283,10 @@ export function subscribeMatch(
   onUpdate: (match: FirestoreMatchDocument | null) => void,
   onError: (err: Error) => void,
 ): Unsubscribe {
+  const firestore = requireDb();
   const path = `matches/${matchId}`;
   return onSnapshot(
-    doc(db, 'matches', matchId),
+    doc(firestore, 'matches', matchId),
     (snapshot) => {
       if (!snapshot.exists()) {
         onUpdate(null);

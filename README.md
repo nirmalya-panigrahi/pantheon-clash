@@ -44,6 +44,8 @@ npm install --legacy-peer-deps
 npm run dev
 ```
 
+To enable 2-Player Online Arena locally with Firebase Auth & Cloud Firestore, copy `.env.example` to `.env.local` and set `VITE_FIREBASE_API_KEY` (`.env*` and `firebase-applet-config.json` are gitignored so no API key is committed or bundled into public GitHub Pages builds).
+
 ### Verification & Testing
 
 ```bash
@@ -54,4 +56,4 @@ npm run build
 
 ## GitHub Pages Deployment
 
-The included `.github/workflows/deploy.yml` workflow builds, tests, and deploys `dist/` to GitHub Pages on every push to `main` using Node.js 22 and `vite.config.ts` (`base: './'`).
+The included `.github/workflows/deploy.yml` workflow builds, tests, and deploys `dist/` to GitHub Pages on every push to `main` using Node.js 22 and `vite.config.ts` (`base: './'`). Solo vs. Deterministic Bot, the 60-card Codex, and Rules run 100% client-side with zero API keys in the repository or bundle.
