@@ -1,0 +1,226 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 3 && id.size() <= 64 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUid(uid) {
+      return uid is string && uid.size() >= 1 && uid.size() <= 128 && uid.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidStatus(status) {
+      return status in ['waiting', 'active', 'finished'];
+    }
+
+    function isValidTurn(turn) {
+      return turn in ['p1', 'p2'];
+    }
+
+    function isValidRealm(realm) {
+      return realm in ['SKY', 'UNDERWORLD', 'SEA', 'WAR'];
+    }
+
+    function isValidStat(stat) {
+      return stat in ['might', 'arcana', 'cunning', 'influence'];
+    }
+
+    function isValidWinner(winner) {
+      return winner in ['NONE', 'p1', 'p2', 'DRAW'];
+    }
+
+    function isValidDeck(deck) {
+      return deck is list && deck.size() <= 60 && (deck.size() == 0 || (deck[0] is string && deck[0].size() <= 64));
+    }
+
+    function isValidActivePlayers(players) {
+      return players is list
+        && players.size() <= 2
+        && (players.size() == 0 || isValidUid(players[0]))
+        && (players.size() < 2 || isValidUid(players[1]));
+    }
+
+    function isValidBoolPair(pair) {
+      return pair is map
+        && pair.keys().hasAll(['p1', 'p2'])
+        && pair.keys().hasOnly(['p1', 'p2'])
+        && pair.p1 is bool
+        && pair.p2 is bool;
+    }
+
+    function isValidLastOutcome(outcome) {
+      return outcome == null || (
+        outcome is map
+        && outcome.keys().hasAll([
+          'round', 'stat', 'p1CardId', 'p2CardId',
+          'p1Effective', 'p2Effective', 'p1Bonus', 'p2Bonus',
+          'gambitActive', 'winner', 'potWon'
+        ])
+        && outcome.keys().hasOnly([
+          'round', 'stat', 'p1CardId', 'p2CardId',
+          'p1Effective', 'p2Effective', 'p1Bonus', 'p2Bonus',
+          'gambitActive', 'resurrectedPlayer', 'winner', 'potWon'
+        ])
+        && outcome.round is int && outcome.round >= 1 && outcome.round <= 10000
+        && isValidStat(outcome.stat)
+        && outcome.p1CardId is string && outcome.p1CardId.size() >= 1 && outcome.p1CardId.size() <= 64
+        && outcome.p2CardId is string && outcome.p2CardId.size() >= 1 && outcome.p2CardId.size() <= 64
+        && outcome.p1Effective is int && outcome.p1Effective >= 0 && outcome.p1Effective <= 500
+        && outcome.p2Effective is int && outcome.p2Effective >= 0 && outcome.p2Effective <= 500
+        && outcome.p1Bonus is int && outcome.p1Bonus >= 0 && outcome.p1Bonus <= 15
+        && outcome.p2Bonus is int && outcome.p2Bonus >= 0 && outcome.p2Bonus <= 15
+        && outcome.gambitActive is bool
+        && (!('resurrectedPlayer' in outcome) || outcome.resurrectedPlayer == null || outcome.resurrectedPlayer in ['p1', 'p2'])
+        && outcome.winner in ['p1', 'p2', 'TIE']
+        && outcome.potWon is int && outcome.potWon >= 0 && outcome.potWon <= 60
+      );
+    }
+
+    function isValidMatch(data) {
+      return data.keys().hasAll([
+          'matchId', 'status', 'hostUid', 'hostName',
+          'guestUid', 'guestName', 'activePlayers', 'matchSeed',
+          'round', 'activeTurn', 'activeRealm',
+          'p1Deck', 'p2Deck', 'warPot',
+          'resurrectionUsed', 'gambitUsed', 'gambitArmed',
+          'winner', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'matchId', 'status', 'hostUid', 'hostName',
+          'guestUid', 'guestName', 'activePlayers', 'matchSeed',
+          'round', 'activeTurn', 'activeRealm',
+          'p1Deck', 'p2Deck', 'warPot',
+          'resurrectionUsed', 'gambitUsed', 'gambitArmed',
+          'winner', 'lastOutcome', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.matchId)
+        && isValidStatus(data.status)
+        && isValidUid(data.hostUid)
+        && data.hostName is string && data.hostName.size() >= 1 && data.hostName.size() <= 64
+        && data.guestUid is string && data.guestUid.size() <= 128
+        && data.guestName is string && data.guestName.size() <= 64
+        && isValidActivePlayers(data.activePlayers)
+        && data.matchSeed is int && data.matchSeed >= 0 && data.matchSeed <= 4294967295
+        && data.round is int && data.round >= 1 && data.round <= 10000
+        && isValidTurn(data.activeTurn)
+        && isValidRealm(data.activeRealm)
+        && isValidDeck(data.p1Deck)
+        && isValidDeck(data.p2Deck)
+        && isValidDeck(data.warPot)
+        && isValidBoolPair(data.resurrectionUsed)
+        && isValidBoolPair(data.gambitUsed)
+        && data.gambitArmed is bool
+        && isValidWinner(data.winner)
+        && (!('lastOutcome' in data) || isValidLastOutcome(data.lastOutcome))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isParticipant(data) {
+      return request.auth.uid == data.hostUid
+        || (data.guestUid != '' && request.auth.uid == data.guestUid);
+    }
+
+    function isJoinAction() {
+      return existing().status == 'waiting'
+        && existing().guestUid == ''
+        && request.auth.uid != existing().hostUid
+        && incoming().status == 'active'
+        && incoming().guestUid == request.auth.uid
+        && incoming().guestName.size() >= 1
+        && incoming().activePlayers.size() == 2
+        && incoming().activePlayers.hasAll([existing().hostUid, request.auth.uid])
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'guestUid', 'guestName', 'status', 'activePlayers', 'updatedAt'
+        ]);
+    }
+
+    function isGameplayAction() {
+      return existing().status == 'active'
+        && existing().winner == 'NONE'
+        && isParticipant(existing())
+        && incoming().guestUid == existing().guestUid
+        && incoming().guestName == existing().guestName
+        && incoming().activePlayers == existing().activePlayers
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'status', 'round', 'activeTurn', 'activeRealm',
+          'p1Deck', 'p2Deck', 'warPot',
+          'resurrectionUsed', 'gambitUsed', 'gambitArmed',
+          'winner', 'lastOutcome', 'updatedAt'
+        ]);
+    }
+
+    function isLeaveAction() {
+      return (request.auth.uid in existing().activePlayers)
+        && !(request.auth.uid in incoming().activePlayers)
+        && incoming().activePlayers.size() == existing().activePlayers.size() - 1
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'activePlayers', 'updatedAt'
+        ]);
+    }
+
+    match /matches/{matchId} {
+      allow get: if isSignedIn() && isValidId(matchId) && (
+        existing().status == 'waiting'
+        || isParticipant(existing())
+        || (request.auth.uid in existing().activePlayers)
+      );
+
+      allow list: if isSignedIn() && (
+        resource.data.status == 'waiting'
+        || resource.data.hostUid == request.auth.uid
+        || resource.data.guestUid == request.auth.uid
+      );
+
+      allow create: if isSignedIn()
+        && isValidId(matchId)
+        && isValidMatch(incoming())
+        && incoming().matchId == matchId
+        && incoming().status == 'waiting'
+        && incoming().hostUid == request.auth.uid
+        && incoming().guestUid == ''
+        && incoming().guestName == ''
+        && incoming().activePlayers.size() == 1
+        && incoming().activePlayers[0] == request.auth.uid
+        && incoming().round == 1
+        && incoming().winner == 'NONE'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn()
+        && isValidId(matchId)
+        && isValidMatch(incoming())
+        && incoming().matchId == existing().matchId
+        && incoming().hostUid == existing().hostUid
+        && incoming().hostName == existing().hostName
+        && incoming().matchSeed == existing().matchSeed
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (isJoinAction() || isGameplayAction() || isLeaveAction());
+
+      allow delete: if isSignedIn() && isValidId(matchId) && (
+        (existing().activePlayers.size() <= 1 && (request.auth.uid in existing().activePlayers))
+        || (existing().status == 'waiting' && existing().hostUid == request.auth.uid)
+        || (request.time > existing().createdAt + duration.value(2, 'h') && (existing().status == 'waiting' || existing().activePlayers.size() == 0))
+      );
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Pantheon Clash",
+  "description": "A deterministic Mythology Trump Card game with seeded PRNG, rotating realms, tactical passives, and live Firestore multiplayer.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

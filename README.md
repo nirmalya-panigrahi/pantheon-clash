@@ -1,11 +1,57 @@
-<div align="center">
+# Pantheon Clash — Mythology Trump Card Game
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+![React](https://img.shields.io/badge/React-19-149ECA?style=flat-square&logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-7-3178C6?style=flat-square&logo=typescript&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-8-646CFF?style=flat-square&logo=vite&logoColor=white)
+![Firebase](https://img.shields.io/badge/Firebase-Firestore%20%26%20Auth-DD2C00?style=flat-square&logo=firebase&logoColor=white)
+![Vitest](https://img.shields.io/badge/Vitest-Tested-6E9F18?style=flat-square&logo=vitest&logoColor=white)
 
-  <h1>Built with AI Studio</h2>
+A deterministic **Mythology Trump Card** web game built with Vite, React, TypeScript, Tailwind CSS, and Firebase (Authentication + Cloud Firestore), configured for static hosting on GitHub Pages.
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+Zero runtime AI or LLM calls are used anywhere in the application—deck shuffling, rotating realms, prophecy hints, and bot tactics are 100% deterministic via a seeded **Mulberry32** PRNG.
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+## Architecture
 
-</div>
+```mermaid
+flowchart LR
+  UI["React UI (Lobby / Arena / Codex)"] --> Reducer["Pure Reducer: reduceMatchState()"]
+  Reducer --> PRNG["Mulberry32 PRNG (Seeded Shuffle & Realms)"]
+  Reducer --> Cards["60-Card Roster (src/data/cards.json)"]
+  UI --> Bot["Deterministic Bot Policy"]
+  Bot --> Reducer
+  UI --> Auth["Firebase Auth (Google + Anonymous)"]
+  UI --> MatchSvc["Firestore Match Service (Transactions)"]
+  MatchSvc --> DB[("Cloud Firestore Named DB")]
+  MatchSvc --> Cleanup["activePlayers Cleanup & 2h Stale Sweep"]
+```
+
+## Game Mechanics
+
+- **60-Deity Roster**: Seven pantheons (`Greek`, `Norse`, `Hindu`, `Egyptian`, `Japanese`, `Celtic`, `Mesoamerican`) split 30 vs 30 from a seeded Mulberry32 shuffle.
+- **Four Stats**: `Might`, `Arcana`, `Cunning`, and `Influence`.
+- **Rotating Realms**: Every 3 rounds, the active realm cycles deterministically across `SKY`, `UNDERWORLD`, `SEA`, and `WAR`, granting `+15` to matching-domain cards.
+- **Tactical Passives**:
+  - **Piercing**: Ignores the opponent's `+15` realm bonus.
+  - **Prophecy**: Deterministically reveals one stat of the opponent's top card before choosing.
+  - **Resurrection**: Once per match, returns a losing card to the bottom of its owner's deck instead of forfeiting it.
+- **Gambit (Once per Match)**: Inverts the round comparison so the lowest effective stat wins.
+- **War Pot Ties**: Equal effective stats move both cards into `warPot`, claimed by the next round's winner.
+
+## Local Development
+
+```bash
+npm install --legacy-peer-deps
+npm run dev
+```
+
+### Verification & Testing
+
+```bash
+npm run lint
+npm test
+npm run build
+```
+
+## GitHub Pages Deployment
+
+The included `.github/workflows/deploy.yml` workflow builds, tests, and deploys `dist/` to GitHub Pages on every push to `main` using Node.js 22 and `vite.config.ts` (`base: './'`).

@@ -1,0 +1,141 @@
+{
+  "entities": {
+    "Match": {
+      "title": "Match",
+      "description": "A deterministic 2-player mythology trump card match with active player presence tracking.",
+      "type": "object",
+      "properties": {
+        "matchId": {
+          "type": "string",
+          "description": "Unique identifier of the match document.",
+          "minLength": 3,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "status": {
+          "type": "string",
+          "description": "Lifecycle status of the match.",
+          "enum": ["waiting", "active", "finished"]
+        },
+        "hostUid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the match creator.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "hostName": {
+          "type": "string",
+          "description": "Display name of the host player.",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "guestUid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the second player, or empty string while waiting.",
+          "maxLength": 128
+        },
+        "guestName": {
+          "type": "string",
+          "description": "Display name of the guest player, or empty string while waiting.",
+          "maxLength": 64
+        },
+        "activePlayers": {
+          "type": "array",
+          "description": "UIDs of players currently connected to the match session (max 2)."
+        },
+        "matchSeed": {
+          "type": "integer",
+          "description": "Deterministic Mulberry32 PRNG seed for deck shuffling and realm rotation."
+        },
+        "round": {
+          "type": "integer",
+          "description": "Current 1-indexed round number."
+        },
+        "activeTurn": {
+          "type": "string",
+          "description": "Which seat chooses the stat for the current round.",
+          "enum": ["p1", "p2"]
+        },
+        "activeRealm": {
+          "type": "string",
+          "description": "Active mythological realm granting +15 bonus to matching domains.",
+          "enum": ["SKY", "UNDERWORLD", "SEA", "WAR"]
+        },
+        "p1Deck": {
+          "type": "array",
+          "description": "Ordered card IDs in Player 1 deck (top card at index 0)."
+        },
+        "p2Deck": {
+          "type": "array",
+          "description": "Ordered card IDs in Player 2 deck (top card at index 0)."
+        },
+        "warPot": {
+          "type": "array",
+          "description": "Card IDs held in the tie pot for the next round winner."
+        },
+        "resurrectionUsed": {
+          "type": "object",
+          "description": "Tracks whether each player has expended their once-per-match Resurrection passive."
+        },
+        "gambitUsed": {
+          "type": "object",
+          "description": "Tracks whether each player has expended their once-per-match Gambit inversion."
+        },
+        "gambitArmed": {
+          "type": "boolean",
+          "description": "True if the active turn player armed Gambit for the upcoming clash."
+        },
+        "winner": {
+          "type": "string",
+          "description": "Match outcome once finished, or NONE while ongoing.",
+          "enum": ["NONE", "p1", "p2", "DRAW"]
+        },
+        "lastOutcome": {
+          "type": "object",
+          "description": "Summary of the most recently resolved clash round."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the match lobby was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the latest match state update."
+        }
+      },
+      "required": [
+        "matchId",
+        "status",
+        "hostUid",
+        "hostName",
+        "guestUid",
+        "guestName",
+        "activePlayers",
+        "matchSeed",
+        "round",
+        "activeTurn",
+        "activeRealm",
+        "p1Deck",
+        "p2Deck",
+        "warPot",
+        "resurrectionUsed",
+        "gambitUsed",
+        "gambitArmed",
+        "winner",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/matches/{matchId}": {
+      "schema": {
+        "$ref": "#/entities/Match"
+      },
+      "description": "Multiplayer match state and lobby metadata."
+    }
+  }
+}

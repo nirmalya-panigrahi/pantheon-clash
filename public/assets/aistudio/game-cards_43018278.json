@@ -1,0 +1,542 @@
+[
+  {
+    "id": "zeus",
+    "name": "Zeus",
+    "pantheon": "Greek",
+    "tier": 3,
+    "domain": "SKY",
+    "passive": "PIERCING",
+    "stats": { "might": 86, "arcana": 92, "cunning": 65, "influence": 95 }
+  },
+  {
+    "id": "poseidon",
+    "name": "Poseidon",
+    "pantheon": "Greek",
+    "tier": 3,
+    "domain": "SEA",
+    "passive": "NONE",
+    "stats": { "might": 88, "arcana": 84, "cunning": 58, "influence": 82 }
+  },
+  {
+    "id": "hades",
+    "name": "Hades",
+    "pantheon": "Greek",
+    "tier": 3,
+    "domain": "UNDERWORLD",
+    "passive": "RESURRECTION",
+    "stats": { "might": 78, "arcana": 89, "cunning": 76, "influence": 80 }
+  },
+  {
+    "id": "athena",
+    "name": "Athena",
+    "pantheon": "Greek",
+    "tier": 2,
+    "domain": "WAR",
+    "passive": "PROPHECY",
+    "stats": { "might": 74, "arcana": 82, "cunning": 96, "influence": 85 }
+  },
+  {
+    "id": "apollo",
+    "name": "Apollo",
+    "pantheon": "Greek",
+    "tier": 2,
+    "domain": "SKY",
+    "passive": "PROPHECY",
+    "stats": { "might": 72, "arcana": 87, "cunning": 78, "influence": 84 }
+  },
+  {
+    "id": "ares",
+    "name": "Ares",
+    "pantheon": "Greek",
+    "tier": 2,
+    "domain": "WAR",
+    "passive": "PIERCING",
+    "stats": { "might": 92, "arcana": 56, "cunning": 48, "influence": 73 }
+  },
+  {
+    "id": "hermes",
+    "name": "Hermes",
+    "pantheon": "Greek",
+    "tier": 2,
+    "domain": "SKY",
+    "passive": "PROPHECY",
+    "stats": { "might": 62, "arcana": 72, "cunning": 94, "influence": 75 }
+  },
+  {
+    "id": "achilles",
+    "name": "Achilles",
+    "pantheon": "Greek",
+    "tier": 1,
+    "domain": "WAR",
+    "passive": "PIERCING",
+    "stats": { "might": 91, "arcana": 45, "cunning": 66, "influence": 70 }
+  },
+  {
+    "id": "medusa",
+    "name": "Medusa",
+    "pantheon": "Greek",
+    "tier": 1,
+    "domain": "SEA",
+    "passive": "NONE",
+    "stats": { "might": 64, "arcana": 81, "cunning": 74, "influence": 54 }
+  },
+  {
+    "id": "odysseus",
+    "name": "Odysseus",
+    "pantheon": "Greek",
+    "tier": 1,
+    "domain": "SEA",
+    "passive": "PROPHECY",
+    "stats": { "might": 67, "arcana": 38, "cunning": 95, "influence": 71 }
+  },
+  {
+    "id": "odin",
+    "name": "Odin",
+    "pantheon": "Norse",
+    "tier": 3,
+    "domain": "SKY",
+    "passive": "PROPHECY",
+    "stats": { "might": 82, "arcana": 95, "cunning": 93, "influence": 90 }
+  },
+  {
+    "id": "thor",
+    "name": "Thor",
+    "pantheon": "Norse",
+    "tier": 3,
+    "domain": "WAR",
+    "passive": "PIERCING",
+    "stats": { "might": 97, "arcana": 75, "cunning": 52, "influence": 88 }
+  },
+  {
+    "id": "hel",
+    "name": "Hel",
+    "pantheon": "Norse",
+    "tier": 2,
+    "domain": "UNDERWORLD",
+    "passive": "RESURRECTION",
+    "stats": { "might": 70, "arcana": 88, "cunning": 79, "influence": 74 }
+  },
+  {
+    "id": "loki",
+    "name": "Loki",
+    "pantheon": "Norse",
+    "tier": 2,
+    "domain": "UNDERWORLD",
+    "passive": "PROPHECY",
+    "stats": { "might": 60, "arcana": 83, "cunning": 98, "influence": 68 }
+  },
+  {
+    "id": "jormungandr",
+    "name": "Jormungandr",
+    "pantheon": "Norse",
+    "tier": 2,
+    "domain": "SEA",
+    "passive": "NONE",
+    "stats": { "might": 94, "arcana": 78, "cunning": 61, "influence": 64 }
+  },
+  {
+    "id": "freya",
+    "name": "Freya",
+    "pantheon": "Norse",
+    "tier": 2,
+    "domain": "WAR",
+    "passive": "RESURRECTION",
+    "stats": { "might": 77, "arcana": 91, "cunning": 80, "influence": 86 }
+  },
+  {
+    "id": "heimdall",
+    "name": "Heimdall",
+    "pantheon": "Norse",
+    "tier": 1,
+    "domain": "SKY",
+    "passive": "PROPHECY",
+    "stats": { "might": 79, "arcana": 69, "cunning": 89, "influence": 72 }
+  },
+  {
+    "id": "fenrir",
+    "name": "Fenrir",
+    "pantheon": "Norse",
+    "tier": 1,
+    "domain": "WAR",
+    "passive": "PIERCING",
+    "stats": { "might": 95, "arcana": 50, "cunning": 64, "influence": 59 }
+  },
+  {
+    "id": "tyr",
+    "name": "Tyr",
+    "pantheon": "Norse",
+    "tier": 1,
+    "domain": "WAR",
+    "passive": "NONE",
+    "stats": { "might": 87, "arcana": 52, "cunning": 75, "influence": 77 }
+  },
+  {
+    "id": "njord",
+    "name": "Njord",
+    "pantheon": "Norse",
+    "tier": 1,
+    "domain": "SEA",
+    "passive": "NONE",
+    "stats": { "might": 73, "arcana": 74, "cunning": 68, "influence": 76 }
+  },
+  {
+    "id": "indra",
+    "name": "Indra",
+    "pantheon": "Hindu",
+    "tier": 3,
+    "domain": "SKY",
+    "passive": "PIERCING",
+    "stats": { "might": 90, "arcana": 88, "cunning": 67, "influence": 86 }
+  },
+  {
+    "id": "varuna",
+    "name": "Varuna",
+    "pantheon": "Hindu",
+    "tier": 3,
+    "domain": "SEA",
+    "passive": "NONE",
+    "stats": { "might": 79, "arcana": 94, "cunning": 84, "influence": 85 }
+  },
+  {
+    "id": "yama",
+    "name": "Yama",
+    "pantheon": "Hindu",
+    "tier": 3,
+    "domain": "UNDERWORLD",
+    "passive": "RESURRECTION",
+    "stats": { "might": 81, "arcana": 90, "cunning": 82, "influence": 87 }
+  },
+  {
+    "id": "kartikeya",
+    "name": "Kartikeya",
+    "pantheon": "Hindu",
+    "tier": 2,
+    "domain": "WAR",
+    "passive": "PIERCING",
+    "stats": { "might": 93, "arcana": 83, "cunning": 81, "influence": 84 }
+  },
+  {
+    "id": "garuda",
+    "name": "Garuda",
+    "pantheon": "Hindu",
+    "tier": 2,
+    "domain": "SKY",
+    "passive": "PROPHECY",
+    "stats": { "might": 89, "arcana": 76, "cunning": 85, "influence": 81 }
+  },
+  {
+    "id": "saraswati",
+    "name": "Saraswati",
+    "pantheon": "Hindu",
+    "tier": 2,
+    "domain": "SKY",
+    "passive": "PROPHECY",
+    "stats": { "might": 35, "arcana": 96, "cunning": 92, "influence": 88 }
+  },
+  {
+    "id": "karna",
+    "name": "Karna",
+    "pantheon": "Hindu",
+    "tier": 1,
+    "domain": "WAR",
+    "passive": "PIERCING",
+    "stats": { "might": 93, "arcana": 72, "cunning": 71, "influence": 84 }
+  },
+  {
+    "id": "narada",
+    "name": "Narada",
+    "pantheon": "Hindu",
+    "tier": 1,
+    "domain": "SKY",
+    "passive": "PROPHECY",
+    "stats": { "might": 42, "arcana": 85, "cunning": 97, "influence": 83 }
+  },
+  {
+    "id": "makara",
+    "name": "Makara",
+    "pantheon": "Hindu",
+    "tier": 1,
+    "domain": "SEA",
+    "passive": "NONE",
+    "stats": { "might": 84, "arcana": 66, "cunning": 59, "influence": 52 }
+  },
+  {
+    "id": "chitragupta",
+    "name": "Chitragupta",
+    "pantheon": "Hindu",
+    "tier": 1,
+    "domain": "UNDERWORLD",
+    "passive": "NONE",
+    "stats": { "might": 46, "arcana": 79, "cunning": 94, "influence": 73 }
+  },
+  {
+    "id": "ra",
+    "name": "Ra",
+    "pantheon": "Egyptian",
+    "tier": 3,
+    "domain": "SKY",
+    "passive": "PIERCING",
+    "stats": { "might": 85, "arcana": 96, "cunning": 80, "influence": 96 }
+  },
+  {
+    "id": "osiris",
+    "name": "Osiris",
+    "pantheon": "Egyptian",
+    "tier": 3,
+    "domain": "UNDERWORLD",
+    "passive": "RESURRECTION",
+    "stats": { "might": 75, "arcana": 91, "cunning": 77, "influence": 91 }
+  },
+  {
+    "id": "set",
+    "name": "Set",
+    "pantheon": "Egyptian",
+    "tier": 2,
+    "domain": "WAR",
+    "passive": "PIERCING",
+    "stats": { "might": 90, "arcana": 82, "cunning": 86, "influence": 70 }
+  },
+  {
+    "id": "anubis",
+    "name": "Anubis",
+    "pantheon": "Egyptian",
+    "tier": 2,
+    "domain": "UNDERWORLD",
+    "passive": "RESURRECTION",
+    "stats": { "might": 76, "arcana": 86, "cunning": 83, "influence": 82 }
+  },
+  {
+    "id": "horus",
+    "name": "Horus",
+    "pantheon": "Egyptian",
+    "tier": 2,
+    "domain": "SKY",
+    "passive": "NONE",
+    "stats": { "might": 88, "arcana": 79, "cunning": 78, "influence": 85 }
+  },
+  {
+    "id": "isis",
+    "name": "Isis",
+    "pantheon": "Egyptian",
+    "tier": 2,
+    "domain": "UNDERWORLD",
+    "passive": "RESURRECTION",
+    "stats": { "might": 58, "arcana": 95, "cunning": 91, "influence": 89 }
+  },
+  {
+    "id": "sobek",
+    "name": "Sobek",
+    "pantheon": "Egyptian",
+    "tier": 1,
+    "domain": "SEA",
+    "passive": "NONE",
+    "stats": { "might": 89, "arcana": 63, "cunning": 62, "influence": 67 }
+  },
+  {
+    "id": "thoth",
+    "name": "Thoth",
+    "pantheon": "Egyptian",
+    "tier": 1,
+    "domain": "SKY",
+    "passive": "PROPHECY",
+    "stats": { "might": 44, "arcana": 93, "cunning": 97, "influence": 81 }
+  },
+  {
+    "id": "montu",
+    "name": "Montu",
+    "pantheon": "Egyptian",
+    "tier": 1,
+    "domain": "WAR",
+    "passive": "PIERCING",
+    "stats": { "might": 86, "arcana": 65, "cunning": 70, "influence": 72 }
+  },
+  {
+    "id": "apophis",
+    "name": "Apophis",
+    "pantheon": "Egyptian",
+    "tier": 1,
+    "domain": "UNDERWORLD",
+    "passive": "NONE",
+    "stats": { "might": 94, "arcana": 84, "cunning": 55, "influence": 50 }
+  },
+  {
+    "id": "amaterasu",
+    "name": "Amaterasu",
+    "pantheon": "Japanese",
+    "tier": 3,
+    "domain": "SKY",
+    "passive": "PIERCING",
+    "stats": { "might": 84, "arcana": 96, "cunning": 78, "influence": 95 }
+  },
+  {
+    "id": "tsukuyomi",
+    "name": "Tsukuyomi",
+    "pantheon": "Japanese",
+    "tier": 3,
+    "domain": "SKY",
+    "passive": "PROPHECY",
+    "stats": { "might": 72, "arcana": 91, "cunning": 85, "influence": 80 }
+  },
+  {
+    "id": "susanoo",
+    "name": "Susanoo",
+    "pantheon": "Japanese",
+    "tier": 3,
+    "domain": "SEA",
+    "passive": "PIERCING",
+    "stats": { "might": 95, "arcana": 80, "cunning": 56, "influence": 79 }
+  },
+  {
+    "id": "izanagi",
+    "name": "Izanagi",
+    "pantheon": "Japanese",
+    "tier": 2,
+    "domain": "SKY",
+    "passive": "RESURRECTION",
+    "stats": { "might": 80, "arcana": 88, "cunning": 74, "influence": 86 }
+  },
+  {
+    "id": "izanami",
+    "name": "Izanami",
+    "pantheon": "Japanese",
+    "tier": 2,
+    "domain": "UNDERWORLD",
+    "passive": "RESURRECTION",
+    "stats": { "might": 73, "arcana": 90, "cunning": 71, "influence": 82 }
+  },
+  {
+    "id": "raijin",
+    "name": "Raijin",
+    "pantheon": "Japanese",
+    "tier": 2,
+    "domain": "SKY",
+    "passive": "PIERCING",
+    "stats": { "might": 91, "arcana": 83, "cunning": 60, "influence": 75 }
+  },
+  {
+    "id": "hachiman",
+    "name": "Hachiman",
+    "pantheon": "Japanese",
+    "tier": 2,
+    "domain": "WAR",
+    "passive": "NONE",
+    "stats": { "might": 89, "arcana": 70, "cunning": 84, "influence": 87 }
+  },
+  {
+    "id": "fujin",
+    "name": "Fujin",
+    "pantheon": "Japanese",
+    "tier": 1,
+    "domain": "SKY",
+    "passive": "PROPHECY",
+    "stats": { "might": 78, "arcana": 77, "cunning": 82, "influence": 71 }
+  },
+  {
+    "id": "ryujin",
+    "name": "Ryujin",
+    "pantheon": "Japanese",
+    "tier": 1,
+    "domain": "SEA",
+    "passive": "PROPHECY",
+    "stats": { "might": 85, "arcana": 86, "cunning": 79, "influence": 77 }
+  },
+  {
+    "id": "shuten_doji",
+    "name": "Shuten-doji",
+    "pantheon": "Japanese",
+    "tier": 1,
+    "domain": "UNDERWORLD",
+    "passive": "NONE",
+    "stats": { "might": 92, "arcana": 68, "cunning": 67, "influence": 62 }
+  },
+  {
+    "id": "the_dagda",
+    "name": "The Dagda",
+    "pantheon": "Celtic",
+    "tier": 3,
+    "domain": "SKY",
+    "passive": "RESURRECTION",
+    "stats": { "might": 88, "arcana": 92, "cunning": 75, "influence": 90 }
+  },
+  {
+    "id": "morrigan",
+    "name": "The Morrigan",
+    "pantheon": "Celtic",
+    "tier": 2,
+    "domain": "WAR",
+    "passive": "PROPHECY",
+    "stats": { "might": 81, "arcana": 89, "cunning": 91, "influence": 83 }
+  },
+  {
+    "id": "lugh",
+    "name": "Lugh",
+    "pantheon": "Celtic",
+    "tier": 2,
+    "domain": "SKY",
+    "passive": "PIERCING",
+    "stats": { "might": 87, "arcana": 84, "cunning": 90, "influence": 85 }
+  },
+  {
+    "id": "manannan",
+    "name": "Manannan mac Lir",
+    "pantheon": "Celtic",
+    "tier": 1,
+    "domain": "SEA",
+    "passive": "PROPHECY",
+    "stats": { "might": 82, "arcana": 86, "cunning": 88, "influence": 78 }
+  },
+  {
+    "id": "cu_chulainn",
+    "name": "Cu Chulainn",
+    "pantheon": "Celtic",
+    "tier": 1,
+    "domain": "WAR",
+    "passive": "PIERCING",
+    "stats": { "might": 96, "arcana": 54, "cunning": 72, "influence": 76 }
+  },
+  {
+    "id": "quetzalcoatl",
+    "name": "Quetzalcoatl",
+    "pantheon": "Mesoamerican",
+    "tier": 3,
+    "domain": "SKY",
+    "passive": "PROPHECY",
+    "stats": { "might": 82, "arcana": 95, "cunning": 89, "influence": 93 }
+  },
+  {
+    "id": "tezcatlipoca",
+    "name": "Tezcatlipoca",
+    "pantheon": "Mesoamerican",
+    "tier": 3,
+    "domain": "UNDERWORLD",
+    "passive": "PROPHECY",
+    "stats": { "might": 86, "arcana": 93, "cunning": 96, "influence": 89 }
+  },
+  {
+    "id": "tlaloc",
+    "name": "Tlaloc",
+    "pantheon": "Mesoamerican",
+    "tier": 2,
+    "domain": "SEA",
+    "passive": "NONE",
+    "stats": { "might": 85, "arcana": 88, "cunning": 64, "influence": 86 }
+  },
+  {
+    "id": "huitzilopochtli",
+    "name": "Huitzilopochtli",
+    "pantheon": "Mesoamerican",
+    "tier": 2,
+    "domain": "WAR",
+    "passive": "PIERCING",
+    "stats": { "might": 94, "arcana": 81, "cunning": 77, "influence": 91 }
+  },
+  {
+    "id": "mictlantecuhtli",
+    "name": "Mictlantecuhtli",
+    "pantheon": "Mesoamerican",
+    "tier": 1,
+    "domain": "UNDERWORLD",
+    "passive": "RESURRECTION",
+    "stats": { "might": 83, "arcana": 87, "cunning": 70, "influence": 79 }
+  }
+]
