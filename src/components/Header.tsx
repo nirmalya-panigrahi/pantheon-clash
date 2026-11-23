@@ -1,4 +1,7 @@
-export type AppScreen = 'lobby' | 'arena' | 'codex' | 'rules';
+import { BookOpen, Settings, Sparkles } from 'lucide-react';
+import { Button } from './ui';
+
+export type AppScreen = 'lobby' | 'arena' | 'codex';
 
 interface HeaderProps {
   screen: AppScreen;
@@ -7,6 +10,8 @@ interface HeaderProps {
   isSignedIn: boolean;
   signingIn: boolean;
   onNavigate: (screen: AppScreen) => void;
+  onOpenHowToPlay: () => void;
+  onOpenSettings: () => void;
   onAuthAction: () => void;
   onQuickSolo: () => void;
 }
@@ -18,6 +23,8 @@ export function Header({
   isSignedIn,
   signingIn,
   onNavigate,
+  onOpenHowToPlay,
+  onOpenSettings,
   onAuthAction,
   onQuickSolo,
 }: HeaderProps) {
@@ -25,21 +32,23 @@ export function Header({
     { id: 'lobby', label: 'Lobby' },
     ...(hasActiveMatch ? [{ id: 'arena' as const, label: 'Arena' }] : []),
     { id: 'codex', label: 'Codex' },
-    { id: 'rules', label: 'Rules' },
   ];
 
   return (
-    <header className="border-b border-white/10 bg-[#0E1117]/95 backdrop-blur-sm">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-8">
+    <header className="sticky top-0 z-40 border-b border-white/10 bg-[#0B0E17]/90 backdrop-blur-md">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-6">
         <button
           type="button"
           onClick={() => onNavigate('lobby')}
-          className="font-display text-lg sm:text-xl font-bold tracking-tight text-stone-100 hover:text-amber-400 transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-amber-500"
+          className="inline-flex items-center gap-2 font-display text-base sm:text-xl font-bold tracking-tight text-stone-100 hover:text-amber-300 transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 rounded-md"
         >
-          Pantheon Clash
+          <span className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-400/40 flex items-center justify-center text-amber-300 shrink-0">
+            <Sparkles className="w-4 h-4" aria-hidden="true" />
+          </span>
+          <span>Pantheon Clash</span>
         </button>
 
-        <nav className="flex items-center gap-4 sm:gap-6 text-sm font-medium" aria-label="Main navigation">
+        <nav className="flex items-center gap-3 sm:gap-6 text-xs sm:text-sm font-medium" aria-label="Main navigation">
           {navItems.map((item) => {
             const active = screen === item.id;
             return (
@@ -47,9 +56,9 @@ export function Header({
                 key={item.id}
                 type="button"
                 onClick={() => onNavigate(item.id)}
-                className={`py-2 whitespace-nowrap shrink-0 transition-colors cursor-pointer border-b-2 focus-visible:outline-2 focus-visible:outline-amber-500 ${
+                className={`py-2 px-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer border-b-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 ${
                   active
-                    ? 'border-amber-500 text-amber-400'
+                    ? 'border-amber-400 text-amber-300'
                     : 'border-transparent text-stone-300 hover:text-stone-100'
                 }`}
               >
@@ -59,24 +68,42 @@ export function Header({
           })}
         </nav>
 
-        <div className="shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onOpenHowToPlay}
+            aria-label="How to Play"
+            className="px-2 sm:px-3"
+          >
+            <BookOpen className="w-4 h-4 text-amber-300" aria-hidden="true" />
+            <span className="hidden md:inline">How to Play</span>
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onOpenSettings}
+            aria-label="Open settings"
+            className="px-2 sm:px-3"
+          >
+            <Settings className="w-4 h-4 text-stone-300" aria-hidden="true" />
+            <span className="hidden lg:inline">Settings</span>
+          </Button>
+
           {isFirebaseConfigured ? (
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="sm"
               disabled={signingIn}
               onClick={onAuthAction}
-              className="px-4 py-2 min-h-[40px] rounded-lg bg-amber-600 hover:bg-amber-500 text-stone-950 font-semibold text-xs sm:text-sm transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-amber-400"
             >
               {signingIn ? 'Signing In...' : isSignedIn ? 'Sign Out' : 'Sign In'}
-            </button>
+            </Button>
           ) : (
-            <button
-              type="button"
-              onClick={onQuickSolo}
-              className="px-4 py-2 min-h-[40px] rounded-lg bg-amber-600 hover:bg-amber-500 text-stone-950 font-semibold text-xs sm:text-sm transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-amber-400"
-            >
-              Solo Duel
-            </button>
+            <Button variant="primary" size="sm" onClick={onQuickSolo}>
+              Quick Duel
+            </Button>
           )}
         </div>
       </div>

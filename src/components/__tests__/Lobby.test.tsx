@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { createInitialMatchState } from '../../engine/gameEngine';
 import type { AuthState } from '../../hooks/useAuth';
 import type { FirestoreMatchDocument } from '../../types/game';
 import { Lobby } from '../Lobby';
@@ -22,26 +23,25 @@ function makeAuthState(overrides: Partial<AuthState> = {}): AuthState {
 }
 
 function makeLobbyDoc(overrides: Partial<FirestoreMatchDocument> = {}): FirestoreMatchDocument {
+  const base = createInitialMatchState(202601, {
+    playerCount: 3,
+    players: [
+      { name: 'AthenaHost', isBot: false, uid: 'host-uid-1', ready: true },
+      { name: 'Open Seat', isBot: false, uid: null, ready: false },
+      { name: 'Open Seat', isBot: false, uid: null, ready: false },
+    ],
+  });
+
   return {
+    ...base,
     matchId: 'match-abc-123',
+    roomCode: 'AB12CD',
     status: 'waiting',
     hostUid: 'host-uid-1',
-    hostName: 'AthenaHost',
-    guestUid: '',
-    guestName: '',
+    maxPlayers: 3,
+    fillWithBots: true,
     activePlayers: ['host-uid-1'],
-    matchSeed: 202601,
-    round: 1,
-    activeTurn: 'p1',
-    activeRealm: 'SKY',
-    p1Deck: ['zeus'],
-    p2Deck: ['thor'],
-    warPot: [],
-    resurrectionUsed: { p1: false, p2: false },
-    gambitUsed: { p1: false, p2: false },
-    gambitArmed: false,
-    winner: 'NONE',
-    lastOutcome: null,
+    turnStartedAt: null,
     createdAt: null,
     updatedAt: null,
     ...overrides,
@@ -49,7 +49,7 @@ function makeLobbyDoc(overrides: Partial<FirestoreMatchDocument> = {}): Firestor
 }
 
 describe('Lobby component', () => {
-  it('Blue Pill: starts solo match with normalized user seed and triggers Google/Guest auth', async () => {
+  it('Blue Pill: starts solo 4-player 2v2 match with normalized seed and handles auth buttons', async () => {
     const user = userEvent.setup();
     const onStartSolo = vi.fn();
     const authState = makeAuthState();
@@ -71,12 +71,19 @@ describe('Lobby component', () => {
       />,
     );
 
+    await user.click(screen.getByRole('button', { name: '4P' }));
+    await user.click(screen.getByRole('button', { name: /2v2 teams/i }));
+
     const seedInput = screen.getByLabelText(/match seed/i);
     await user.clear(seedInput);
     await user.type(seedInput, '4242');
     await user.click(screen.getByRole('button', { name: /play vs bot/i }));
 
-    expect(onStartSolo).toHaveBeenCalledWith(4242);
+    expect(onStartSolo).toHaveBeenCalledWith({
+      seed: 4242,
+      playerCount: 4,
+      teamMode: 'teams',
+    });
 
     await user.click(screen.getByRole('button', { name: /sign in with google/i }));
     expect(authState.loginWithGoogle).toHaveBeenCalledTimes(1);
@@ -85,17 +92,32 @@ describe('Lobby component', () => {
     expect(authState.loginAsGuest).toHaveBeenCalledTimes(1);
   });
 
-  it('Blue Pill & Red Pill: lists open lobbies, prevents joining own lobby, and renders errors cleanly', async () => {
+  it('Blue Pill & Red Pill: supports segmented room-code input, creating rooms, and open room joining', async () => {
     const user = userEvent.setup();
     const onJoinMultiplayer = vi.fn();
+    const onCreateMultiplayer = vi.fn().mockResolvedValue(undefined);
     const authState = makeAuthState({
       user: { uid: 'host-uid-1', isAnonymous: true } as AuthState['user'],
       displayName: 'AthenaHost',
     });
 
+    const otherBase = createInitialMatchState(202601, {
+      playerCount: 2,
+      players: [
+        { name: 'OdinHost', isBot: false, uid: 'other-uid-2', ready: true },
+        { name: 'Open Seat', isBot: false, uid: null, ready: false },
+      ],
+    });
+
     const lobbies = [
-      makeLobbyDoc({ matchId: 'match-own', hostUid: 'host-uid-1', hostName: 'AthenaHost' }),
-      makeLobbyDoc({ matchId: 'match-other', hostUid: 'other-uid-2', hostName: 'OdinGuest' }),
+      makeLobbyDoc({ matchId: 'match-own', hostUid: 'host-uid-1' }),
+      makeLobbyDoc({
+        ...otherBase,
+        matchId: 'match-other',
+        roomCode: 'XYZ789',
+        hostUid: 'other-uid-2',
+        maxPlayers: 2,
+      }),
     ];
 
     render(
@@ -107,26 +129,43 @@ describe('Lobby component', () => {
         sweptCount={2}
         creatingMatch={false}
         joiningMatchId={null}
-        lobbyActionError="Match already full"
+        lobbyActionError="Room already full"
         onStartSolo={vi.fn()}
-        onCreateMultiplayer={vi.fn()}
+        onCreateMultiplayer={onCreateMultiplayer}
         onJoinMultiplayer={onJoinMultiplayer}
         onSweepStale={vi.fn()}
       />,
     );
 
     expect(screen.getByText(/cleaned 2 stale lobbies/i)).toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent('Match already full');
+    expect(screen.getByRole('alert')).toHaveTextContent('Room already full');
 
-    const ownBtn = screen.getByRole('button', { name: /your lobby/i });
-    expect(ownBtn).toBeDisabled();
+    expect(screen.getByRole('button', { name: /your lobby/i })).toBeDisabled();
 
-    const joinBtn = screen.getByRole('button', { name: /join match/i });
-    await user.click(joinBtn);
+    await user.click(screen.getByRole('button', { name: /join match/i }));
     expect(onJoinMultiplayer).toHaveBeenCalledWith('match-other');
+
+    // Switch to Create Room & test creating 3-seat room
+    await user.click(screen.getByRole('button', { name: '3 Seats' }));
+    await user.click(screen.getByRole('button', { name: /create 3-player room/i }));
+    expect(onCreateMultiplayer).toHaveBeenCalledWith({
+      seed: 202601,
+      maxPlayers: 3,
+      teamMode: 'ffa',
+      fillWithBots: true,
+    });
+
+    // Switch to Join Room & enter 6-char segmented room code
+    await user.click(screen.getByRole('tab', { name: /join room/i }));
+    const chars = ['K', '9', 'M', '2', 'P', '4'];
+    for (let i = 0; i < 6; i += 1) {
+      await user.type(screen.getByLabelText(`Room code character ${i + 1}`), chars[i]);
+    }
+    await user.click(screen.getByRole('button', { name: /^join room$/i }));
+    expect(onJoinMultiplayer).toHaveBeenCalledWith('K9M2P4');
   });
 
-  it('Red Pill: hides auth buttons and explains offline mode when no Firebase API key is configured', () => {
+  it('Red Pill: hides auth buttons and explains offline mode when Firebase is not configured', () => {
     const authState = makeAuthState({ isConfigured: false });
 
     render(

@@ -2,7 +2,7 @@
   "entities": {
     "Match": {
       "title": "Match",
-      "description": "A deterministic 2-player mythology trump card match with active player presence tracking.",
+      "description": "A deterministic 2-to-4 player mythology trump card match with seat management, 2v2 team support, turn timers, and active player presence tracking.",
       "type": "object",
       "properties": {
         "matchId": {
@@ -12,6 +12,13 @@
           "maxLength": 64,
           "pattern": "^[a-zA-Z0-9_-]+$"
         },
+        "roomCode": {
+          "type": "string",
+          "description": "6-character uppercase room invite code.",
+          "minLength": 6,
+          "maxLength": 6,
+          "pattern": "^[A-Z0-9]{6}$"
+        },
         "status": {
           "type": "string",
           "description": "Lifecycle status of the match.",
@@ -19,81 +26,86 @@
         },
         "hostUid": {
           "type": "string",
-          "description": "Firebase Auth UID of the match creator.",
+          "description": "Firebase Auth UID of the room host.",
           "minLength": 1,
           "maxLength": 128,
           "pattern": "^[a-zA-Z0-9_-]+$"
         },
-        "hostName": {
-          "type": "string",
-          "description": "Display name of the host player.",
-          "minLength": 1,
-          "maxLength": 64
+        "maxPlayers": {
+          "type": "integer",
+          "description": "Configured table capacity (2, 3, or 4)."
         },
-        "guestUid": {
-          "type": "string",
-          "description": "Firebase Auth UID of the second player, or empty string while waiting.",
-          "maxLength": 128
-        },
-        "guestName": {
-          "type": "string",
-          "description": "Display name of the guest player, or empty string while waiting.",
-          "maxLength": 64
+        "fillWithBots": {
+          "type": "boolean",
+          "description": "Whether empty seats are automatically filled by deterministic bots on match start."
         },
         "activePlayers": {
           "type": "array",
-          "description": "UIDs of players currently connected to the match session (max 2)."
+          "description": "UIDs of players currently connected to the match session (max 4)."
         },
         "matchSeed": {
           "type": "integer",
-          "description": "Deterministic Mulberry32 PRNG seed for deck shuffling and realm rotation."
+          "description": "Deterministic Mulberry32 PRNG seed for deck shuffling, realm rotation, and leader choice."
         },
         "round": {
           "type": "integer",
           "description": "Current 1-indexed round number."
         },
-        "activeTurn": {
+        "maxRounds": {
+          "type": "integer",
+          "description": "Round cap (default 60) after which card counts decide the winner."
+        },
+        "teamMode": {
           "type": "string",
-          "description": "Which seat chooses the stat for the current round.",
-          "enum": ["p1", "p2"]
+          "description": "Free-for-all or 2v2 teams mode (4 players).",
+          "enum": ["ffa", "teams"]
+        },
+        "activeTurnIndex": {
+          "type": "integer",
+          "description": "0-based seat index of the player whose turn it is."
         },
         "activeRealm": {
           "type": "string",
           "description": "Active mythological realm granting +15 bonus to matching domains.",
           "enum": ["SKY", "UNDERWORLD", "SEA", "WAR"]
         },
-        "p1Deck": {
+        "players": {
           "type": "array",
-          "description": "Ordered card IDs in Player 1 deck (top card at index 0)."
-        },
-        "p2Deck": {
-          "type": "array",
-          "description": "Ordered card IDs in Player 2 deck (top card at index 0)."
+          "description": "Ordered seat roster (2-4 seats) holding decks, UID, ready/away status, team, and passive flags."
         },
         "warPot": {
           "type": "array",
           "description": "Card IDs held in the tie pot for the next round winner."
         },
-        "resurrectionUsed": {
-          "type": "object",
-          "description": "Tracks whether each player has expended their once-per-match Resurrection passive."
-        },
-        "gambitUsed": {
-          "type": "object",
-          "description": "Tracks whether each player has expended their once-per-match Gambit inversion."
-        },
         "gambitArmed": {
           "type": "boolean",
           "description": "True if the active turn player armed Gambit for the upcoming clash."
         },
+        "prophecyTarget": {
+          "type": "object",
+          "description": "Chosen opponent prophecy target and revealed stat for the current round, or null."
+        },
+        "statWins": {
+          "type": "object",
+          "description": "Cumulative rounds won per stat key (might, arcana, cunning, influence)."
+        },
+        "bestWin": {
+          "type": "object",
+          "description": "Highest effective value clash win recorded in this match, or null."
+        },
         "winner": {
           "type": "string",
           "description": "Match outcome once finished, or NONE while ongoing.",
-          "enum": ["NONE", "p1", "p2", "DRAW"]
+          "enum": ["NONE", "p1", "p2", "p3", "p4", "TEAM_0", "TEAM_1", "DRAW"]
         },
         "lastOutcome": {
           "type": "object",
           "description": "Summary of the most recently resolved clash round."
+        },
+        "turnStartedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the current turn started (for 20s timeout tracking)."
         },
         "createdAt": {
           "type": "string",
@@ -108,23 +120,24 @@
       },
       "required": [
         "matchId",
+        "roomCode",
         "status",
         "hostUid",
-        "hostName",
-        "guestUid",
-        "guestName",
+        "maxPlayers",
+        "fillWithBots",
         "activePlayers",
         "matchSeed",
         "round",
-        "activeTurn",
+        "maxRounds",
+        "teamMode",
+        "activeTurnIndex",
         "activeRealm",
-        "p1Deck",
-        "p2Deck",
+        "players",
         "warPot",
-        "resurrectionUsed",
-        "gambitUsed",
         "gambitArmed",
+        "statWins",
         "winner",
+        "turnStartedAt",
         "createdAt",
         "updatedAt"
       ]
@@ -135,7 +148,7 @@
       "schema": {
         "$ref": "#/entities/Match"
       },
-      "description": "Multiplayer match state and lobby metadata."
+      "description": "2-4 player multiplayer rooms, match state, and presence metadata."
     }
   }
 }

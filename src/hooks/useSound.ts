@@ -1,15 +1,17 @@
 import { useCallback, useRef, useState } from 'react';
 
-export type SoundCue = 'pick' | 'win' | 'lose' | 'tie' | 'gambit' | 'resurrect';
+export type SoundCue = 'pick' | 'flip' | 'win' | 'lose' | 'tie' | 'gambit' | 'resurrect';
 
-export function useSound() {
-  const [muted, setMuted] = useState(false);
+export function useSound(initialMuted = true) {
+  const [muted, setMuted] = useState(initialMuted);
   const ctxRef = useRef<AudioContext | null>(null);
 
   const play = useCallback(
     (cue: SoundCue) => {
       if (muted || typeof window === 'undefined') return;
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AudioCtx) return;
 
       try {
@@ -31,16 +33,24 @@ export function useSound() {
           osc.type = 'triangle';
           osc.frequency.setValueAtTime(440, now);
           osc.frequency.exponentialRampToValueAtTime(580, now + 0.08);
-          gain.gain.setValueAtTime(0.06, now);
+          gain.gain.setValueAtTime(0.05, now);
           gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
           osc.start(now);
           osc.stop(now + 0.1);
+        } else if (cue === 'flip') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(280, now);
+          osc.frequency.exponentialRampToValueAtTime(520, now + 0.07);
+          gain.gain.setValueAtTime(0.04, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+          osc.start(now);
+          osc.stop(now + 0.08);
         } else if (cue === 'win') {
           osc.type = 'sine';
           osc.frequency.setValueAtTime(523.25, now);
           osc.frequency.setValueAtTime(659.25, now + 0.08);
           osc.frequency.setValueAtTime(783.99, now + 0.16);
-          gain.gain.setValueAtTime(0.07, now);
+          gain.gain.setValueAtTime(0.06, now);
           gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
           osc.start(now);
           osc.stop(now + 0.28);
@@ -48,7 +58,7 @@ export function useSound() {
           osc.type = 'sawtooth';
           osc.frequency.setValueAtTime(320, now);
           osc.frequency.exponentialRampToValueAtTime(190, now + 0.2);
-          gain.gain.setValueAtTime(0.04, now);
+          gain.gain.setValueAtTime(0.035, now);
           gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
           osc.start(now);
           osc.stop(now + 0.22);
@@ -56,7 +66,7 @@ export function useSound() {
           osc.type = 'triangle';
           osc.frequency.setValueAtTime(392, now);
           osc.frequency.setValueAtTime(392, now + 0.11);
-          gain.gain.setValueAtTime(0.05, now);
+          gain.gain.setValueAtTime(0.045, now);
           gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
           osc.start(now);
           osc.stop(now + 0.22);
@@ -64,7 +74,7 @@ export function useSound() {
           osc.type = 'square';
           osc.frequency.setValueAtTime(620, now);
           osc.frequency.exponentialRampToValueAtTime(310, now + 0.14);
-          gain.gain.setValueAtTime(0.035, now);
+          gain.gain.setValueAtTime(0.03, now);
           gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
           osc.start(now);
           osc.stop(now + 0.16);
@@ -72,7 +82,7 @@ export function useSound() {
           osc.type = 'sine';
           osc.frequency.setValueAtTime(330, now);
           osc.frequency.exponentialRampToValueAtTime(880, now + 0.22);
-          gain.gain.setValueAtTime(0.06, now);
+          gain.gain.setValueAtTime(0.055, now);
           gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
           osc.start(now);
           osc.stop(now + 0.24);
@@ -86,5 +96,5 @@ export function useSound() {
 
   const toggleMuted = useCallback(() => setMuted((prev) => !prev), []);
 
-  return { muted, toggleMuted, play };
+  return { muted, setMuted, toggleMuted, play };
 }

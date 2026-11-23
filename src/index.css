@@ -9,8 +9,14 @@
 @layer base {
   body {
     font-family: var(--font-sans);
-    background-color: #0e1117;
+    background-color: #0b0f1c;
+    background-image:
+      radial-gradient(ellipse 80% 55% at 50% -10%, rgba(217, 119, 6, 0.14), transparent 70%),
+      radial-gradient(ellipse 70% 60% at 50% 110%, rgba(30, 58, 138, 0.18), transparent 70%),
+      linear-gradient(180deg, #0b0f1c 0%, #0f1526 50%, #090d17 100%);
+    background-attachment: fixed;
     color: #f5f2eb;
+    overflow-x: hidden;
   }
 
   h1,
@@ -24,6 +30,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+.manuscript-vignette {
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(251, 191, 36, 0.08), transparent 55%),
+    radial-gradient(circle at 50% 50%, transparent 50%, rgba(5, 8, 16, 0.55) 100%);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -32,4 +44,12 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+.reduced-motion *,
+.reduced-motion *::before,
+.reduced-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
 }

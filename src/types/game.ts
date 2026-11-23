@@ -13,9 +13,13 @@ export type Passive = 'NONE' | 'PIERCING' | 'PROPHECY' | 'RESURRECTION';
 
 export type StatKey = 'might' | 'arcana' | 'cunning' | 'influence';
 
-export type PlayerId = 'p1' | 'p2';
+export type SeatId = 'p1' | 'p2' | 'p3' | 'p4';
 
-export type MatchWinner = 'NONE' | 'p1' | 'p2' | 'DRAW';
+export type PlayerCount = 2 | 3 | 4;
+
+export type TeamMode = 'ffa' | 'teams';
+
+export type MatchWinner = 'NONE' | SeatId | 'TEAM_0' | 'TEAM_1' | 'DRAW';
 
 export type MatchStatus = 'waiting' | 'active' | 'finished';
 
@@ -31,39 +35,89 @@ export interface MythCard {
   stats: CardStats;
 }
 
+export interface PlayerState {
+  id: SeatId;
+  seatIndex: number;
+  name: string;
+  isBot: boolean;
+  uid: string | null;
+  team: 0 | 1;
+  deck: string[];
+  resurrectionUsed: boolean;
+  gambitUsed: boolean;
+  eliminated: boolean;
+  away: boolean;
+  ready: boolean;
+  roundsWon: number;
+}
+
+export interface PlayedCardEntry {
+  playerId: SeatId;
+  seatIndex: number;
+  cardId: string;
+  baseValue: number;
+  bonus: number;
+  effectiveValue: number;
+  pierced: boolean;
+}
+
 export interface RoundOutcome {
   round: number;
+  leaderId: SeatId;
   stat: StatKey;
-  p1CardId: string;
-  p2CardId: string;
-  p1Effective: number;
-  p2Effective: number;
-  p1Bonus: number;
-  p2Bonus: number;
+  entries: PlayedCardEntry[];
   gambitActive: boolean;
-  resurrectedPlayer: PlayerId | null;
-  winner: 'p1' | 'p2' | 'TIE';
+  resurrectedPlayers: SeatId[];
+  winnerId: SeatId | 'TIE';
+  tiedPlayerIds: SeatId[];
   potWon: number;
+  potSizeAfter: number;
+}
+
+export interface ProphecyTarget {
+  bySeat: number;
+  targetSeat: number;
+  stat: StatKey;
+  baseValue: number;
+  effectiveValue: number;
+}
+
+export interface BestWinRecord {
+  cardId: string;
+  playerId: SeatId;
+  stat: StatKey;
+  effectiveValue: number;
+  round: number;
 }
 
 export interface MatchState {
   matchSeed: number;
   round: number;
-  activeTurn: PlayerId;
+  maxRounds: number;
+  teamMode: TeamMode;
+  activeTurnIndex: number;
   activeRealm: Realm;
-  p1Deck: string[];
-  p2Deck: string[];
+  players: PlayerState[];
   warPot: string[];
-  resurrectionUsed: { p1: boolean; p2: boolean };
-  gambitUsed: { p1: boolean; p2: boolean };
   gambitArmed: boolean;
+  prophecyTarget: ProphecyTarget | null;
+  statWins: Record<StatKey, number>;
+  bestWin: BestWinRecord | null;
   winner: MatchWinner;
   lastOutcome: RoundOutcome | null;
 }
 
+export interface PlayerSeedConfig {
+  name: string;
+  isBot: boolean;
+  uid?: string | null;
+  ready?: boolean;
+}
+
 export type MatchAction =
-  | { type: 'TOGGLE_GAMBIT'; player: PlayerId }
-  | { type: 'PICK_STAT'; player: PlayerId; stat: StatKey; useGambit?: boolean }
+  | { type: 'TOGGLE_GAMBIT'; playerIndex: number }
+  | { type: 'SELECT_PROPHECY_TARGET'; playerIndex: number; targetIndex: number }
+  | { type: 'PICK_STAT'; playerIndex: number; stat: StatKey; useGambit?: boolean }
   | { type: 'RESET_MATCH'; matchSeed?: number };
 
 export interface ProphecyHint {
@@ -74,12 +128,13 @@ export interface ProphecyHint {
 
 export interface FirestoreMatchDocument extends MatchState {
   matchId: string;
+  roomCode: string;
   status: MatchStatus;
   hostUid: string;
-  hostName: string;
-  guestUid: string;
-  guestName: string;
+  maxPlayers: PlayerCount;
+  fillWithBots: boolean;
   activePlayers: string[];
+  turnStartedAt: unknown;
   createdAt: unknown;
   updatedAt: unknown;
 }

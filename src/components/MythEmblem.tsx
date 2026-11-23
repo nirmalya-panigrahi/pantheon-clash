@@ -1,4 +1,6 @@
-import type { Pantheon, Passive, Realm } from '../types/game';
+import { Crown, Eye, Flame, Sparkles, Swords } from 'lucide-react';
+import { PANTHEON_THEMES } from '../theme/pantheons';
+import type { Pantheon, Passive, Realm, StatKey } from '../types/game';
 
 export function RealmIcon({
   realm,
@@ -58,9 +60,22 @@ export function RealmIcon({
   );
 }
 
+export function StatIcon({
+  stat,
+  className = 'w-4 h-4',
+}: {
+  stat: StatKey;
+  className?: string;
+}) {
+  if (stat === 'might') return <Swords className={className} aria-hidden="true" />;
+  if (stat === 'arcana') return <Sparkles className={className} aria-hidden="true" />;
+  if (stat === 'cunning') return <Eye className={className} aria-hidden="true" />;
+  return <Crown className={className} aria-hidden="true" />;
+}
+
 export function PassiveIcon({
   passive,
-  className = 'w-4 h-4',
+  className = 'w-3.5 h-3.5',
 }: {
   passive: Passive;
   className?: string;
@@ -90,98 +105,86 @@ export function PassiveIcon({
     );
   }
   if (passive === 'RESURRECTION') {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
-        <path
-          d="M12 4v6m0-6-3 3m3-3 3 3M6 13a6 6 0 1 0 12 0"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    );
+    return <Flame className={className} aria-hidden="true" />;
   }
   return null;
 }
 
 export function PantheonCrest({
   pantheon,
-  domain,
+  size = 'md',
 }: {
   pantheon: Pantheon;
-  domain: Realm;
+  domain?: Realm;
+  size?: 'sm' | 'md' | 'lg';
 }) {
-  const accentMap: Record<Realm, string> = {
-    SKY: '#B45309',
-    UNDERWORLD: '#5B21B6',
-    SEA: '#0369A1',
-    WAR: '#B91C1C',
-  };
-  const stroke = accentMap[domain];
+  const theme = PANTHEON_THEMES[pantheon];
+  const stroke = theme.accentHex;
+  const heightClass = size === 'lg' ? 'h-28' : size === 'sm' ? 'h-14' : 'h-20';
 
   return (
     <svg
-      viewBox="0 0 120 72"
+      viewBox="0 0 140 84"
       fill="none"
-      className="w-full h-16"
+      className={`w-full ${heightClass}`}
       aria-hidden="true"
     >
       <rect
-        x="1"
-        y="1"
-        width="118"
-        height="70"
-        rx="6"
+        x="2"
+        y="2"
+        width="136"
+        height="80"
+        rx="8"
         stroke={stroke}
-        strokeOpacity="0.22"
-        strokeWidth="1"
+        strokeOpacity="0.28"
+        strokeWidth="1.2"
       />
+      <circle cx="70" cy="42" r="28" stroke={stroke} strokeOpacity="0.16" strokeWidth="1" strokeDasharray="3 3" />
       {pantheon === 'Greek' && (
-        <g stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M62 14L50 38h11l-3 20 14-26H60l2-18Z" fill={stroke} fillOpacity="0.14" />
-          <path d="M34 52c-6-8-6-22 2-30M86 52c6-8 6-22-2-30" strokeOpacity="0.55" />
+        <g stroke={stroke} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M72 15L58 43h12l-4 25 18-31H70l2-22Z" fill={stroke} fillOpacity="0.16" />
+          <path d="M36 62c-8-10-8-30 4-40M104 62c8-10 8-30-4-40" strokeOpacity="0.55" />
         </g>
       )}
       {pantheon === 'Norse' && (
-        <g stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M60 12v48M44 24l32 24M76 24L44 48" />
-          <polygon points="60,12 74,36 60,60 46,36" fill={stroke} fillOpacity="0.1" />
+        <g stroke={stroke} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M70 14v56M50 28l40 28M90 28L50 56" />
+          <polygon points="70,14 88,42 70,70 52,42" fill={stroke} fillOpacity="0.12" />
         </g>
       )}
       {pantheon === 'Hindu' && (
-        <g stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="60" cy="36" r="16" fill={stroke} fillOpacity="0.1" />
-          <circle cx="60" cy="36" r="5" />
-          <path d="M60 14v8M60 50v8M38 36h8M74 36h8M44.5 20.5l5.5 5.5M70 46l5.5 5.5M75.5 20.5L70 26M50 46l-5.5 5.5" />
+        <g stroke={stroke} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="70" cy="42" r="19" fill={stroke} fillOpacity="0.12" />
+          <circle cx="70" cy="42" r="6" />
+          <path d="M70 15v10M70 59v10M43 42h10M87 42h10M51 23l7 7M82 54l7 7M89 23l-7 7M58 54l-7 7" />
         </g>
       )}
       {pantheon === 'Egyptian' && (
-        <g stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M32 36c8-11 20-16 28-16s20 5 28 16c-8 11-20 16-28 16s-20-5-28-16Z" fill={stroke} fillOpacity="0.1" />
-          <circle cx="60" cy="36" r="7" />
-          <path d="M60 43v13M52 52h16" />
+        <g stroke={stroke} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M36 42c10-13 24-19 34-19s24 6 34 19c-10 13-24 19-34 19s-24-6-34-19Z" fill={stroke} fillOpacity="0.14" />
+          <circle cx="70" cy="42" r="8.5" />
+          <path d="M70 51v16M61 62h18" />
         </g>
       )}
       {pantheon === 'Japanese' && (
-        <g stroke={stroke} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M34 22c16 4 36 4 52 0M38 30h44M46 24v32M74 24v32" />
-          <circle cx="60" cy="43" r="6" fill={stroke} fillOpacity="0.15" strokeWidth="1.5" />
+        <g stroke={stroke} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M38 25c20 5 44 5 64 0M44 35h52M54 27v39M86 27v39" />
+          <circle cx="70" cy="50" r="8" fill={stroke} fillOpacity="0.16" strokeWidth="1.6" />
         </g>
       )}
       {pantheon === 'Celtic' && (
-        <g stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="60" cy="36" r="18" strokeOpacity="0.35" />
-          <circle cx="60" cy="26" r="8" fill={stroke} fillOpacity="0.1" />
-          <circle cx="51" cy="42" r="8" fill={stroke} fillOpacity="0.1" />
-          <circle cx="69" cy="42" r="8" fill={stroke} fillOpacity="0.1" />
+        <g stroke={stroke} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="70" cy="42" r="22" strokeOpacity="0.35" />
+          <circle cx="70" cy="30" r="9.5" fill={stroke} fillOpacity="0.12" />
+          <circle cx="59.5" cy="49" r="9.5" fill={stroke} fillOpacity="0.12" />
+          <circle cx="80.5" cy="49" r="9.5" fill={stroke} fillOpacity="0.12" />
         </g>
       )}
       {pantheon === 'Mesoamerican' && (
-        <g stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polygon points="60,13 80,36 60,59 40,36" fill={stroke} fillOpacity="0.12" />
-          <rect x="52" y="28" width="16" height="16" />
-          <circle cx="60" cy="36" r="3" fill={stroke} />
+        <g stroke={stroke} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <polygon points="70,15 95,42 70,69 45,42" fill={stroke} fillOpacity="0.14" />
+          <rect x="60" y="32" width="20" height="20" />
+          <circle cx="70" cy="42" r="3.5" fill={stroke} />
         </g>
       )}
     </svg>
@@ -217,12 +220,12 @@ export function getPassiveLabel(passive: Passive): string {
 export function getPassiveSummary(passive: Passive): string {
   switch (passive) {
     case 'PIERCING':
-      return 'Ignores opponent realm bonus';
+      return 'Ignores all opponents’ realm bonuses';
     case 'PROPHECY':
-      return 'Reveals 1 opponent stat';
+      return 'Reveals 1 stat of a chosen opponent';
     case 'RESURRECTION':
       return 'Returns to deck bottom on first loss';
     case 'NONE':
-      return 'Standard deity clash';
+      return 'Pure deity clash';
   }
 }

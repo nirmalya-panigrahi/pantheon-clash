@@ -1,10 +1,25 @@
-import { useState, type FormEvent } from 'react';
-import { RefreshCw, Shield, Swords, Users } from 'lucide-react';
+import { useRef, useState, type ClipboardEvent, type FormEvent, type KeyboardEvent } from 'react';
+import { Bot, PlusCircle, RefreshCw, Shield, Swords, Users } from 'lucide-react';
 import { getRealmForRound } from '../engine/gameEngine';
 import { parseSeedInput } from '../engine/prng';
 import type { AuthState } from '../hooks/useAuth';
-import type { FirestoreMatchDocument } from '../types/game';
+import { REALM_THEMES } from '../theme/pantheons';
+import type { FirestoreMatchDocument, PlayerCount, TeamMode } from '../types/game';
 import { getRealmLabel, RealmIcon } from './MythEmblem';
+import { Badge, Button } from './ui';
+
+export interface SoloLaunchConfig {
+  seed: number;
+  playerCount: PlayerCount;
+  teamMode: TeamMode;
+}
+
+export interface CreateRoomConfig {
+  seed: number;
+  maxPlayers: PlayerCount;
+  teamMode: TeamMode;
+  fillWithBots: boolean;
+}
 
 interface LobbyProps {
   authState: AuthState;
@@ -15,11 +30,14 @@ interface LobbyProps {
   creatingMatch: boolean;
   joiningMatchId: string | null;
   lobbyActionError: string | null;
-  onStartSolo: (seed: number) => void;
-  onCreateMultiplayer: (seed: number) => Promise<void>;
-  onJoinMultiplayer: (matchId: string) => Promise<void>;
+  initialRoomCode?: string;
+  onStartSolo: (config: SoloLaunchConfig) => void;
+  onCreateMultiplayer: (config: CreateRoomConfig) => Promise<void>;
+  onJoinMultiplayer: (matchIdOrCode: string) => Promise<void>;
   onSweepStale: () => Promise<void>;
 }
+
+const SEAT_COUNTS: PlayerCount[] = [2, 3, 4];
 
 function formatLobbyAge(createdAt: unknown): string {
   if (
@@ -28,13 +46,16 @@ function formatLobbyAge(createdAt: unknown): string {
     'toMillis' in createdAt &&
     typeof (createdAt as { toMillis: () => number }).toMillis === 'function'
   ) {
-    const mins = Math.max(0, Math.floor((Date.now() - (createdAt as { toMillis: () => number }).toMillis()) / 60000));
+    const mins = Math.max(
+      0,
+      Math.floor((Date.now() - (createdAt as { toMillis: () => number }).toMillis()) / 60000),
+    );
     if (mins < 1) return 'Just now';
     if (mins < 60) return `${mins}m ago`;
     const hrs = Math.floor(mins / 60);
     return `${hrs}h ${mins % 60}m ago`;
   }
-  return 'Active';
+  return 'Open';
 }
 
 export function Lobby({
@@ -46,13 +67,33 @@ export function Lobby({
   creatingMatch,
   joiningMatchId,
   lobbyActionError,
+  initialRoomCode = '',
   onStartSolo,
   onCreateMultiplayer,
   onJoinMultiplayer,
   onSweepStale,
 }: LobbyProps) {
   const [seedText, setSeedText] = useState('202601');
-  const [joinIdInput, setJoinIdInput] = useState('');
+  const [soloPlayerCount, setSoloPlayerCount] = useState<PlayerCount>(2);
+  const [soloTeamMode, setSoloTeamMode] = useState<TeamMode>('ffa');
+
+  const [roomMaxPlayers, setRoomMaxPlayers] = useState<PlayerCount>(2);
+  const [roomTeamMode, setRoomTeamMode] = useState<TeamMode>('ffa');
+  const [fillWithBots, setFillWithBots] = useState<boolean>(true);
+  const [onlinePanelMode, setOnlinePanelMode] = useState<'join' | 'create'>(
+    initialRoomCode ? 'join' : 'create',
+  );
+
+  const normalizedInitialChars = initialRoomCode
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 6)
+    .split('');
+  const [codeChars, setCodeChars] = useState<string[]>(() =>
+    Array.from({ length: 6 }, (_, i) => normalizedInitialChars[i] ?? ''),
+  );
+  const codeRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [fallbackMatchId, setFallbackMatchId] = useState('');
 
   const parsedSeed = parseSeedInput(seedText);
   const realmPreview = [1, 4, 7, 10].map((roundStart) => ({
@@ -67,46 +108,176 @@ export function Lobby({
 
   const handleSoloSubmit = (e: FormEvent) => {
     e.preventDefault();
-    onStartSolo(parsedSeed);
+    onStartSolo({
+      seed: parsedSeed,
+      playerCount: soloPlayerCount,
+      teamMode: soloPlayerCount === 4 ? soloTeamMode : 'ffa',
+    });
   };
 
-  const handleJoinByCode = (e: FormEvent) => {
+  const handleCreateRoom = () => {
+    void onCreateMultiplayer({
+      seed: parsedSeed,
+      maxPlayers: roomMaxPlayers,
+      teamMode: roomMaxPlayers === 4 ? roomTeamMode : 'ffa',
+      fillWithBots,
+    });
+  };
+
+  const handleCodeCharChange = (index: number, raw: string) => {
+    const clean = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!clean) {
+      setCodeChars((prev) => prev.map((c, idx) => (idx === index ? '' : c)));
+      return;
+    }
+
+    if (clean.length > 1) {
+      const nextChars = [...codeChars];
+      for (let i = 0; i < clean.length && index + i < 6; i += 1) {
+        nextChars[index + i] = clean[i];
+      }
+      setCodeChars(nextChars);
+      const focusIdx = Math.min(5, index + clean.length);
+      codeRefs.current[focusIdx]?.focus();
+      return;
+    }
+
+    setCodeChars((prev) => prev.map((c, idx) => (idx === index ? clean : c)));
+    if (index < 5) {
+      codeRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleCodeKeyDown = (index: number, e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !codeChars[index] && index > 0) {
+      codeRefs.current[index - 1]?.focus();
+    } else if (e.key === 'ArrowLeft' && index > 0) {
+      e.preventDefault();
+      codeRefs.current[index - 1]?.focus();
+    } else if (e.key === 'ArrowRight' && index < 5) {
+      e.preventDefault();
+      codeRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleCodePaste = (e: ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData
+      .getData('text')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')
+      .slice(0, 6);
+    if (!pasted) return;
     e.preventDefault();
-    const cleaned = joinIdInput.trim();
-    if (!cleaned) return;
-    void onJoinMultiplayer(cleaned);
+    const next = Array.from({ length: 6 }, (_, i) => pasted[i] ?? '');
+    setCodeChars(next);
+    codeRefs.current[Math.min(5, pasted.length)]?.focus();
+  };
+
+  const joinedRoomCode = codeChars.join('');
+
+  const handleJoinRoomSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    const target = joinedRoomCode.length === 6 ? joinedRoomCode : fallbackMatchId.trim();
+    if (!target) return;
+    void onJoinMultiplayer(target);
   };
 
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-8">
-      <section className="max-w-3xl space-y-3">
-        <h1 className="font-display text-3xl sm:text-4xl font-bold text-stone-100 tracking-tight text-balance">
-          Deterministic Mythology Trump Card Duels
-        </h1>
-        <p className="text-sm sm:text-base text-stone-300 leading-relaxed">
-          Draw from a 60-deity roster across seven pantheons. Every deck shuffle, realm shift, and bot decision is driven strictly by a Mulberry32 seeded PRNG.
-        </p>
+    <main className="max-w-7xl mx-auto px-3 sm:px-6 py-8 sm:py-12 space-y-8">
+      {/* Hero */}
+      <section className="relative overflow-hidden rounded-3xl border border-amber-400/20 bg-gradient-to-br from-[#161C2E] via-[#101524] to-[#0C101B] p-6 sm:p-10 shadow-2xl">
+        <div className="max-w-3xl space-y-3">
+          <Badge tone="gold">60 Deities · 7 Pantheons · 2–4 Players</Badge>
+          <h1 className="font-display text-3xl sm:text-5xl font-bold text-stone-100 tracking-tight text-balance">
+            Pantheon Clash
+          </h1>
+          <p className="text-sm sm:text-base text-stone-300 leading-relaxed">
+            Deterministic mythology trump duels driven strictly by a Mulberry32 seeded PRNG. Command shifting realms, unleash once-per-match Gambits, and clash solo or with up to 4 players online.
+          </p>
+        </div>
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-        {/* Left: Solo vs Deterministic Bot */}
-        <section className="rounded-xl bg-[#161B24] border border-white/10 p-6 sm:p-7 flex flex-col justify-between gap-6">
+        {/* Left Card: Play vs Bot */}
+        <section className="rounded-2xl bg-[#131826]/95 border border-white/10 p-5 sm:p-7 flex flex-col justify-between gap-6 shadow-xl">
           <div className="space-y-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="font-display text-xl font-bold text-stone-100">
-                  Solo Match vs Bot
+                <h2 className="font-display text-xl sm:text-2xl font-bold text-stone-100">
+                  Play vs Bot
                 </h2>
                 <p className="text-xs sm:text-sm text-stone-400 mt-1">
-                  Instant 30-vs-30 card clash with reproducible seed order.
+                  Instant offline clash against deterministic AI tacticians for 2, 3, or 4 players.
                 </p>
               </div>
               <Swords className="w-5 h-5 text-amber-400 shrink-0 mt-1" aria-hidden="true" />
             </div>
 
             <form onSubmit={handleSoloSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <span className="block text-xs font-medium text-stone-300 mb-1.5">
+                    Table Size
+                  </span>
+                  <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Solo player count">
+                    {SEAT_COUNTS.map((cnt) => (
+                      <button
+                        key={cnt}
+                        type="button"
+                        onClick={() => {
+                          setSoloPlayerCount(cnt);
+                          if (cnt !== 4) setSoloTeamMode('ffa');
+                        }}
+                        className={`min-h-[40px] rounded-xl text-xs font-semibold border transition-colors cursor-pointer ${
+                          soloPlayerCount === cnt
+                            ? 'bg-amber-500 text-stone-950 border-amber-400'
+                            : 'bg-[#0B0E17] text-stone-300 border-white/10 hover:border-white/25'
+                        }`}
+                      >
+                        {cnt}P
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {soloPlayerCount === 4 && (
+                  <div>
+                    <span className="block text-xs font-medium text-stone-300 mb-1.5">
+                      4-Player Format
+                    </span>
+                    <div className="grid grid-cols-2 gap-1.5" role="group" aria-label="Solo team mode">
+                      <button
+                        type="button"
+                        onClick={() => setSoloTeamMode('ffa')}
+                        className={`min-h-[40px] rounded-xl text-xs font-semibold border transition-colors cursor-pointer ${
+                          soloTeamMode === 'ffa'
+                            ? 'bg-amber-500 text-stone-950 border-amber-400'
+                            : 'bg-[#0B0E17] text-stone-300 border-white/10 hover:border-white/25'
+                        }`}
+                      >
+                        Free-for-All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSoloTeamMode('teams')}
+                        className={`min-h-[40px] rounded-xl text-xs font-semibold border transition-colors cursor-pointer ${
+                          soloTeamMode === 'teams'
+                            ? 'bg-amber-500 text-stone-950 border-amber-400'
+                            : 'bg-[#0B0E17] text-stone-300 border-white/10 hover:border-white/25'
+                        }`}
+                      >
+                        2v2 Teams
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div>
-                <label htmlFor="match-seed-input" className="block text-xs font-medium text-stone-300 mb-1.5">
+                <label
+                  htmlFor="match-seed-input"
+                  className="block text-xs font-medium text-stone-300 mb-1.5"
+                >
                   Match Seed (number or phrase)
                 </label>
                 <div className="flex flex-col sm:flex-row gap-2.5">
@@ -116,35 +287,33 @@ export function Lobby({
                     value={seedText}
                     onChange={(e) => setSeedText(e.target.value)}
                     placeholder="202601"
-                    className="flex-1 min-h-[44px] px-3.5 py-2 rounded-lg bg-[#0E1117] border border-white/15 text-stone-100 font-mono text-sm focus:outline-none focus:border-amber-500"
+                    className="flex-1 min-h-[44px] px-3.5 py-2 rounded-xl bg-[#0B0E17] border border-white/15 text-stone-100 font-mono text-sm focus:outline-none focus:border-amber-400"
                   />
-                  <button
-                    type="button"
-                    onClick={handleRandomizeSeed}
-                    className="min-h-[44px] px-4 py-2 rounded-lg border border-white/15 bg-[#1D2430] hover:bg-[#252D3B] text-stone-200 text-sm font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-                  >
+                  <Button type="button" variant="secondary" onClick={handleRandomizeSeed}>
                     New Seed
-                  </button>
+                  </Button>
                 </div>
                 <p className="mt-1.5 text-xs text-stone-400 font-mono tabular-nums">
-                  Normalized Seed: {parsedSeed}
+                  Normalized Seed: {parsedSeed} · {Math.floor(60 / soloPlayerCount)} cards each
                 </p>
               </div>
 
-              <div className="rounded-lg bg-[#0E1117] border border-white/10 p-4 space-y-2.5">
+              <div className="rounded-xl bg-[#0B0E17] border border-white/10 p-4 space-y-2.5">
                 <div className="flex items-center justify-between text-xs text-stone-400">
                   <span>Seeded Realm Schedule (+15 Bonus)</span>
-                  <span>Rotates every 3 rounds</span>
+                  <span>Every 3 rounds</span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {realmPreview.map((slot) => (
                     <div
                       key={slot.label}
-                      className="rounded-md bg-[#161B24] border border-white/8 px-2.5 py-2 flex items-center justify-between gap-2 text-xs"
+                      className={`rounded-lg border px-2.5 py-2 flex items-center justify-between gap-1.5 text-xs ${REALM_THEMES[slot.realm].bannerClass}`}
                     >
-                      <span className="font-mono tabular-nums text-stone-400">{slot.label}</span>
-                      <span className="inline-flex items-center gap-1 font-medium text-stone-200">
-                        <RealmIcon realm={slot.realm} className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="font-mono tabular-nums text-stone-300">{slot.label}</span>
+                      <span
+                        className={`inline-flex items-center gap-1 font-semibold ${REALM_THEMES[slot.realm].textClass}`}
+                      >
+                        <RealmIcon realm={slot.realm} className="w-3.5 h-3.5" />
                         {getRealmLabel(slot.realm)}
                       </span>
                     </div>
@@ -152,36 +321,32 @@ export function Lobby({
                 </div>
               </div>
 
-              <button
-                type="submit"
-                className="w-full min-h-[44px] px-5 py-2.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-stone-950 font-semibold text-sm transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-              >
+              <Button type="submit" variant="primary" size="lg" className="w-full">
+                <Bot className="w-4 h-4" aria-hidden="true" />
                 Play vs Bot
-              </button>
+              </Button>
             </form>
           </div>
 
           <div className="pt-4 border-t border-white/10 text-xs text-stone-400 flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>60 Cards</span>
+            <span>Prophecy Target Pick</span>
             <span aria-hidden="true">·</span>
-            <span>4 Stats</span>
+            <span>Piercing Negates Realm</span>
             <span aria-hidden="true">·</span>
-            <span>Once-Per-Match Gambit</span>
-            <span aria-hidden="true">·</span>
-            <span>War Pot Ties</span>
+            <span>60-Round Cap</span>
           </div>
         </section>
 
-        {/* Right: 2-Player Firestore Multiplayer */}
-        <section className="rounded-xl bg-[#161B24] border border-white/10 p-6 sm:p-7 flex flex-col justify-between gap-6">
+        {/* Right Card: Create Room / Join Room (2-4 Players) */}
+        <section className="rounded-2xl bg-[#131826]/95 border border-white/10 p-5 sm:p-7 flex flex-col justify-between gap-6 shadow-xl">
           <div className="space-y-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="font-display text-xl font-bold text-stone-100">
-                  2-Player Online Arena
+                <h2 className="font-display text-xl sm:text-2xl font-bold text-stone-100">
+                  2–4 Player Online Rooms
                 </h2>
                 <p className="text-xs sm:text-sm text-stone-400 mt-1">
-                  Real-time Firestore lobbies with automatic presence cleanup.
+                  Create a room or join with a 6-character code. Real-time Firestore presence cleanup.
                 </p>
               </div>
               <Users className="w-5 h-5 text-amber-400 shrink-0 mt-1" aria-hidden="true" />
@@ -190,7 +355,7 @@ export function Lobby({
             {authState.error && (
               <div
                 role="alert"
-                className="rounded-lg border border-red-500/35 bg-red-500/10 p-3.5 text-xs sm:text-sm text-red-200 flex items-start justify-between gap-3"
+                className="rounded-xl border border-red-500/35 bg-red-500/10 p-3.5 text-xs sm:text-sm text-red-200 flex items-start justify-between gap-3"
               >
                 <span>{authState.error}</span>
                 <button
@@ -206,14 +371,14 @@ export function Lobby({
             {lobbyActionError && (
               <div
                 role="alert"
-                className="rounded-lg border border-red-500/35 bg-red-500/10 p-3.5 text-xs sm:text-sm text-red-200"
+                className="rounded-xl border border-red-500/35 bg-red-500/10 p-3.5 text-xs sm:text-sm text-red-200"
               >
                 {lobbyActionError}
               </div>
             )}
 
             {!authState.isConfigured ? (
-              <div className="rounded-lg bg-[#0E1117] border border-white/10 p-5 space-y-3">
+              <div className="rounded-xl bg-[#0B0E17] border border-white/10 p-5 space-y-3">
                 <div className="flex items-start gap-3">
                   <Shield className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
                   <div className="space-y-1.5">
@@ -221,60 +386,61 @@ export function Lobby({
                       Online multiplayer disabled on this static build
                     </p>
                     <p className="text-xs text-stone-400 leading-relaxed">
-                      No Firebase Web API key is bundled in the public repository or GitHub Pages build. Play Solo Match vs Bot, browse the 60-card Codex, or supply <code className="font-mono text-stone-300">VITE_FIREBASE_API_KEY</code> in your local <code className="font-mono text-stone-300">.env.local</code> to enable online lobbies.
+                      No Firebase Web API key is bundled in the public repository or GitHub Pages build. Play Solo Match vs Bot, browse the 60-card Codex, or supply{' '}
+                      <code className="font-mono text-stone-300">VITE_FIREBASE_API_KEY</code> in your local{' '}
+                      <code className="font-mono text-stone-300">.env.local</code> to enable online rooms.
                     </p>
                   </div>
                 </div>
               </div>
             ) : !authState.user ? (
-              <div className="rounded-lg bg-[#0E1117] border border-white/10 p-5 space-y-4">
+              <div className="rounded-xl bg-[#0B0E17] border border-white/10 p-5 space-y-4">
                 <div className="flex items-start gap-3">
                   <Shield className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
                   <div className="space-y-1">
                     <p className="text-sm font-semibold text-stone-100">
-                      Sign in to host or join online matches
+                      Sign in to create or join online rooms
                     </p>
                     <p className="text-xs text-stone-400 leading-relaxed">
-                      Authenticate with your Google account or enter immediately as an anonymous guest.
+                      Authenticate with Google or jump straight in as an anonymous challenger.
                     </p>
                   </div>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2.5">
-                  <button
-                    type="button"
+                  <Button
+                    variant="primary"
                     disabled={authState.signingIn || authState.loading}
                     onClick={() => void authState.loginWithGoogle()}
-                    className="flex-1 min-h-[44px] px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-stone-950 font-semibold text-sm transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50"
+                    className="flex-1"
                   >
                     Sign in with Google
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    variant="secondary"
                     disabled={authState.signingIn || authState.loading}
                     onClick={() => void authState.loginAsGuest()}
-                    className="flex-1 min-h-[44px] px-4 py-2 rounded-lg border border-white/15 bg-[#1D2430] hover:bg-[#252D3B] text-stone-100 font-semibold text-sm transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50"
+                    className="flex-1"
                   >
                     Continue as Guest
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[#0E1117] border border-white/10 px-4 py-3 text-xs sm:text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#0B0E17] border border-white/10 px-4 py-3 text-xs sm:text-sm">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-stone-400">Player:</span>
+                    <span className="text-stone-400">Seat Name:</span>
                     <span className="font-semibold text-stone-100 truncate">
                       {authState.displayName}
                     </span>
-                    <span className="text-stone-500">·</span>
-                    <span className="text-stone-400">
+                    <Badge tone="neutral">
                       {authState.user.isAnonymous ? 'Guest' : 'Google'}
-                    </span>
+                    </Badge>
                   </div>
                   <button
                     type="button"
                     onClick={() => void onSweepStale()}
-                    className="inline-flex items-center gap-1.5 text-xs font-medium text-stone-300 hover:text-amber-400 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-stone-300 hover:text-amber-300 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                   >
                     <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
                     Sweep Stale
@@ -287,79 +453,246 @@ export function Lobby({
                   </p>
                 )}
 
-                <div className="flex flex-col sm:flex-row gap-2.5">
+                {/* Create Room vs Join Room Switcher */}
+                <div
+                  role="tablist"
+                  aria-label="Room action mode"
+                  className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-[#0B0E17] border border-white/10"
+                >
                   <button
                     type="button"
-                    disabled={creatingMatch}
-                    onClick={() => void onCreateMultiplayer(parsedSeed)}
-                    className="min-h-[44px] px-5 py-2.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-stone-950 font-semibold text-sm transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50"
+                    role="tab"
+                    aria-selected={onlinePanelMode === 'create'}
+                    onClick={() => setOnlinePanelMode('create')}
+                    className={`min-h-[40px] rounded-lg text-xs sm:text-sm font-semibold transition-colors inline-flex items-center justify-center gap-1.5 cursor-pointer ${
+                      onlinePanelMode === 'create'
+                        ? 'bg-amber-500 text-stone-950'
+                        : 'text-stone-300 hover:text-stone-100'
+                    }`}
                   >
-                    {creatingMatch ? 'Creating Match...' : 'Create Match'}
+                    <PlusCircle className="w-4 h-4" aria-hidden="true" />
+                    Create Room
                   </button>
-
-                  <form onSubmit={handleJoinByCode} className="flex-1 flex gap-2">
-                    <input
-                      type="text"
-                      value={joinIdInput}
-                      onChange={(e) => setJoinIdInput(e.target.value)}
-                      placeholder="Join by Match ID"
-                      aria-label="Join by Match ID"
-                      className="flex-1 min-w-0 min-h-[44px] px-3 py-2 rounded-lg bg-[#0E1117] border border-white/15 text-stone-100 font-mono text-xs sm:text-sm focus:outline-none focus:border-amber-500"
-                    />
-                    <button
-                      type="submit"
-                      disabled={!joinIdInput.trim() || joiningMatchId !== null}
-                      className="min-h-[44px] px-4 py-2 rounded-lg border border-white/15 bg-[#1D2430] hover:bg-[#252D3B] text-stone-100 font-semibold text-sm transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50"
-                    >
-                      Join
-                    </button>
-                  </form>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={onlinePanelMode === 'join'}
+                    onClick={() => setOnlinePanelMode('join')}
+                    className={`min-h-[40px] rounded-lg text-xs sm:text-sm font-semibold transition-colors inline-flex items-center justify-center gap-1.5 cursor-pointer ${
+                      onlinePanelMode === 'join'
+                        ? 'bg-amber-500 text-stone-950'
+                        : 'text-stone-300 hover:text-stone-100'
+                    }`}
+                  >
+                    <Users className="w-4 h-4" aria-hidden="true" />
+                    Join Room
+                  </button>
                 </div>
 
+                {onlinePanelMode === 'create' ? (
+                  <div className="rounded-xl bg-[#0B0E17] border border-white/10 p-4 space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <span className="block text-xs font-medium text-stone-300 mb-1.5">
+                          Seats (2–4 Players)
+                        </span>
+                        <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Room seat count">
+                          {SEAT_COUNTS.map((cnt) => (
+                            <button
+                              key={cnt}
+                              type="button"
+                              onClick={() => {
+                                setRoomMaxPlayers(cnt);
+                                if (cnt !== 4) setRoomTeamMode('ffa');
+                              }}
+                              className={`min-h-[38px] rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                                roomMaxPlayers === cnt
+                                  ? 'bg-amber-500 text-stone-950 border-amber-400'
+                                  : 'bg-[#131826] text-stone-300 border-white/10 hover:border-white/25'
+                              }`}
+                            >
+                              {cnt} Seats
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {roomMaxPlayers === 4 && (
+                        <div>
+                          <span className="block text-xs font-medium text-stone-300 mb-1.5">
+                            Format
+                          </span>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setRoomTeamMode('ffa')}
+                              className={`min-h-[38px] rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                                roomTeamMode === 'ffa'
+                                  ? 'bg-amber-500 text-stone-950 border-amber-400'
+                                  : 'bg-[#131826] text-stone-300 border-white/10'
+                              }`}
+                            >
+                              FFA
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRoomTeamMode('teams')}
+                              className={`min-h-[38px] rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                                roomTeamMode === 'teams'
+                                  ? 'bg-amber-500 text-stone-950 border-amber-400'
+                                  : 'bg-[#131826] text-stone-300 border-white/10'
+                              }`}
+                            >
+                              2v2 Teams
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <label className="flex items-center justify-between gap-3 rounded-lg bg-[#131826] border border-white/10 px-3 py-2.5 cursor-pointer">
+                      <span className="text-xs text-stone-200 font-medium">
+                        Fill empty seats with deterministic Bots on Start
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={fillWithBots}
+                        onChange={(e) => setFillWithBots(e.target.checked)}
+                        className="w-4 h-4 accent-amber-500 cursor-pointer"
+                      />
+                    </label>
+
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      disabled={creatingMatch}
+                      onClick={handleCreateRoom}
+                      className="w-full"
+                    >
+                      {creatingMatch ? 'Opening Room...' : `Create ${roomMaxPlayers}-Player Room`}
+                    </Button>
+                  </div>
+                ) : (
+                  <form
+                    onSubmit={handleJoinRoomSubmit}
+                    className="rounded-xl bg-[#0B0E17] border border-white/10 p-4 space-y-3"
+                  >
+                    <label className="block text-xs font-medium text-stone-300">
+                      6-Character Room Code
+                    </label>
+                    <div
+                      className="grid grid-cols-6 gap-1.5 sm:gap-2"
+                      role="group"
+                      aria-label="Room code input"
+                    >
+                      {codeChars.map((char, idx) => (
+                        <input
+                          key={idx}
+                          ref={(el) => {
+                            codeRefs.current[idx] = el;
+                          }}
+                          type="text"
+                          inputMode="text"
+                          maxLength={6}
+                          value={char}
+                          aria-label={`Room code character ${idx + 1}`}
+                          onChange={(e) => handleCodeCharChange(idx, e.target.value)}
+                          onKeyDown={(e) => handleCodeKeyDown(idx, e)}
+                          onPaste={handleCodePaste}
+                          className="h-12 w-full rounded-xl bg-[#131826] border border-white/20 text-center font-mono text-lg font-bold uppercase text-amber-300 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+                        />
+                      ))}
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="text"
+                        value={fallbackMatchId}
+                        onChange={(e) => setFallbackMatchId(e.target.value)}
+                        placeholder="Or paste full Match ID..."
+                        aria-label="Join by Match ID"
+                        className="flex-1 min-w-0 min-h-[40px] px-3 py-1.5 rounded-xl bg-[#131826] border border-white/10 text-stone-200 font-mono text-xs focus:outline-none focus:border-amber-400"
+                      />
+                      <Button
+                        type="submit"
+                        variant="primary"
+                        disabled={
+                          (joinedRoomCode.length < 6 && !fallbackMatchId.trim()) ||
+                          joiningMatchId !== null
+                        }
+                      >
+                        Join Room
+                      </Button>
+                    </div>
+                  </form>
+                )}
+
+                {/* Open Waiting Rooms List */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs text-stone-400">
-                    <span>Open Waiting Lobbies</span>
+                    <span>Open Waiting Rooms</span>
                     <span className="font-mono tabular-nums">{lobbies.length} available</span>
                   </div>
 
                   {lobbiesLoading ? (
-                    <div className="rounded-lg bg-[#0E1117] border border-white/10 p-6 text-center text-xs text-stone-400">
-                      Loading active lobbies...
+                    <div className="rounded-xl bg-[#0B0E17] border border-white/10 p-6 text-center text-xs text-stone-400">
+                      Loading open rooms...
                     </div>
                   ) : lobbiesError ? (
-                    <div className="rounded-lg bg-red-500/10 border border-red-500/30 p-4 text-xs text-red-200">
-                      Unable to load lobbies: {lobbiesError}
+                    <div className="rounded-xl bg-red-500/10 border border-red-500/30 p-4 text-xs text-red-200">
+                      Unable to load rooms: {lobbiesError}
                     </div>
                   ) : lobbies.length === 0 ? (
-                    <div className="rounded-lg bg-[#0E1117] border border-white/10 p-6 text-center text-xs text-stone-400">
-                      No open lobbies right now. Create a match to invite a challenger.
+                    <div className="rounded-xl bg-[#0B0E17] border border-white/10 p-6 text-center text-xs text-stone-400">
+                      No open rooms right now. Create a room to invite challengers.
                     </div>
                   ) : (
-                    <ul className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    <ul className="space-y-2 max-h-56 overflow-y-auto pr-1">
                       {lobbies.map((lobby) => {
-                        const isSelfHost = lobby.hostUid === authState.user?.uid;
+                        const isSelfSeated = lobby.players.some(
+                          (p) => p.uid === authState.user?.uid,
+                        );
+                        const seatedCount = lobby.players.filter((p) => p.uid !== null).length;
+                        const isFull = seatedCount >= lobby.maxPlayers;
                         const isJoining = joiningMatchId === lobby.matchId;
+                        const hostName = lobby.players[0]?.name ?? 'Host';
+
                         return (
                           <li
                             key={lobby.matchId}
-                            className="rounded-lg bg-[#0E1117] border border-white/10 px-4 py-3 flex items-center justify-between gap-3"
+                            className="rounded-xl bg-[#0B0E17] border border-white/10 px-4 py-3 flex items-center justify-between gap-3"
                           >
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-stone-100 truncate">
-                                {lobby.hostName}
-                              </p>
+                            <div className="min-w-0 space-y-0.5">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-sm font-semibold text-stone-100 truncate">
+                                  {hostName}
+                                </p>
+                                {lobby.roomCode && (
+                                  <Badge tone="gold">{lobby.roomCode}</Badge>
+                                )}
+                                {lobby.teamMode === 'teams' && (
+                                  <Badge tone="sky">2v2</Badge>
+                                )}
+                              </div>
                               <p className="text-xs text-stone-400 font-mono tabular-nums truncate">
-                                Seed {lobby.matchSeed} · {formatLobbyAge(lobby.createdAt)}
+                                {seatedCount}/{lobby.maxPlayers} seats · Seed {lobby.matchSeed} ·{' '}
+                                {formatLobbyAge(lobby.createdAt)}
                               </p>
                             </div>
-                            <button
-                              type="button"
-                              disabled={isSelfHost || isJoining}
+                            <Button
+                              variant={isSelfSeated ? 'ghost' : 'secondary'}
+                              size="sm"
+                              disabled={isSelfSeated || isFull || isJoining}
                               onClick={() => void onJoinMultiplayer(lobby.matchId)}
-                              className="min-h-[40px] px-4 py-1.5 rounded-lg bg-[#1D2430] hover:bg-amber-600 hover:text-stone-950 border border-white/15 text-stone-100 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
                             >
-                              {isSelfHost ? 'Your Lobby' : isJoining ? 'Joining...' : 'Join Match'}
-                            </button>
+                              {isSelfSeated
+                                ? 'Your Lobby'
+                                : isFull
+                                  ? 'Full'
+                                  : isJoining
+                                    ? 'Joining...'
+                                    : 'Join Match'}
+                            </Button>
                           </li>
                         );
                       })}
@@ -371,7 +704,7 @@ export function Lobby({
           </div>
 
           <div className="pt-4 border-t border-white/10 text-xs text-stone-400">
-            Closing your tab or leaving removes your UID from activePlayers and deletes empty matches automatically.
+            Closing your tab or leaving removes your UID from activePlayers and deletes empty rooms automatically.
           </div>
         </section>
       </div>

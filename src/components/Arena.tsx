@@ -1,81 +1,206 @@
-import { useEffect, useState } from 'react';
-import { Copy, Check, Volume2, VolumeX, RotateCcw, LogOut } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Award,
+  Bot,
+  Check,
+  Clock,
+  Copy,
+  Crown,
+  Eye,
+  FastForward,
+  Flame,
+  LogOut,
+  Play,
+  RotateCcw,
+  ShieldAlert,
+  Sparkles,
+  UserCheck,
+  UserX,
+  Volume2,
+  VolumeX,
+} from 'lucide-react';
 import { getCardById } from '../data/cards';
 import {
-  computeEffectiveStats,
   getProphecyStat,
+  getProphecyStatForTarget,
+  MAX_ROUNDS,
   ROUNDS_PER_REALM,
+  STAT_KEYS,
 } from '../engine/gameEngine';
 import type { SoundCue } from '../hooks/useSound';
-import type { MatchAction, MatchState, PlayerId, RoundOutcome, StatKey } from '../types/game';
-import { MythCardView } from './MythCardView';
-import { getRealmLabel, RealmIcon } from './MythEmblem';
+import { PASSIVE_META, REALM_THEMES, STAT_META } from '../theme/pantheons';
+import type {
+  MatchAction,
+  MatchState,
+  PlayerState,
+  RoundOutcome,
+  StatKey,
+  TeamMode,
+} from '../types/game';
+import { Card } from './Card';
+import { getRealmLabel, PassiveIcon, RealmIcon, StatIcon } from './MythEmblem';
+import { Badge, Button, Tooltip } from './ui';
 
 interface ArenaProps {
   mode: 'solo' | 'multiplayer';
   matchId?: string;
+  roomCode?: string;
   matchStatus?: 'waiting' | 'active' | 'finished';
+  fillWithBots?: boolean;
   state: MatchState | null;
-  localSeat: PlayerId;
-  p1Label: string;
-  p2Label: string;
+  localSeatIndex: number;
+  isHost?: boolean;
+  turnSecondsRemaining?: number;
   loading?: boolean;
   submitting?: boolean;
   error?: string | null;
   history: RoundOutcome[];
   muted: boolean;
+  reducedMotion?: boolean;
   onToggleMuted: () => void;
   onPlaySound: (cue: SoundCue) => void;
   onDispatch: (action: MatchAction) => void;
   onLeave: () => void;
+  onToggleReady?: () => void;
+  onUpdateRoomOptions?: (updates: { fillWithBots?: boolean; teamMode?: TeamMode }) => void;
+  onKickSeat?: (seatIndex: number) => void;
+  onStartRoom?: () => void;
+  onRejoin?: () => void;
 }
 
-const STAT_LABELS: Record<StatKey, string> = {
-  might: 'Might',
-  arcana: 'Arcana',
-  cunning: 'Cunning',
-  influence: 'Influence',
-};
+type ResolutionPhase = 'idle' | 'flip' | 'compare' | 'winner';
+
+function formatOutcomeTicker(outcome: RoundOutcome, players: readonly PlayerState[]): string {
+  const statLabel = STAT_META[outcome.stat].label;
+  if (outcome.winnerId === 'TIE') {
+    return `Round ${outcome.round}: Tie on ${statLabel}! War pot now ${outcome.potSizeAfter} cards.`;
+  }
+  const winEntry = outcome.entries.find((e) => e.playerId === outcome.winnerId);
+  const winPlayer = players.find((p) => p.id === outcome.winnerId);
+  const winCard = winEntry ? getCardById(winEntry.cardId) : null;
+  const runnerUp = outcome.entries
+    .filter((e) => e.playerId !== outcome.winnerId)
+    .sort((a, b) =>
+      outcome.gambitActive
+        ? a.effectiveValue - b.effectiveValue
+        : b.effectiveValue - a.effectiveValue,
+    )[0];
+  const scoreText =
+    winEntry && runnerUp ? ` (${winEntry.effectiveValue} vs ${runnerUp.effectiveValue})` : '';
+  const potText = outcome.potWon > 0 ? ` +${outcome.potWon} pot` : '';
+  const resText =
+    outcome.resurrectedPlayers.length > 0 ? ' · Resurrection triggered!' : '';
+  return `${winCard?.name ?? winPlayer?.name ?? outcome.winnerId} wins R${outcome.round} on ${statLabel}${scoreText}${potText}${resText}`;
+}
 
 export function Arena({
   mode,
   matchId,
+  roomCode,
   matchStatus = 'active',
+  fillWithBots = false,
   state,
-  localSeat,
-  p1Label,
-  p2Label,
+  localSeatIndex,
+  isHost = false,
+  turnSecondsRemaining = 20,
   loading = false,
   submitting = false,
   error = null,
   history,
   muted,
+  reducedMotion = false,
   onToggleMuted,
   onPlaySound,
   onDispatch,
   onLeave,
+  onToggleReady,
+  onUpdateRoomOptions,
+  onKickSeat,
+  onStartRoom,
+  onRejoin,
 }: ArenaProps) {
-  const [copiedId, setCopiedId] = useState(false);
+  const [copiedInvite, setCopiedInvite] = useState(false);
+  const [resolutionPhase, setResolutionPhase] = useState<ResolutionPhase>('idle');
+  const [countUpProgress, setCountUpProgress] = useState(1);
 
   const lastOutcome = state?.lastOutcome ?? null;
+  const seenRoundRef = useRef<number | null>(lastOutcome?.round ?? null);
 
+  // Trigger ~1.5s skippable round resolution animation when a new round resolves
   useEffect(() => {
     if (!lastOutcome) return;
-    if (lastOutcome.resurrectedPlayer) {
+    if (seenRoundRef.current === lastOutcome.round) return;
+    seenRoundRef.current = lastOutcome.round;
+
+    const localId = state?.players[localSeatIndex]?.id;
+    if (lastOutcome.resurrectedPlayers.length > 0) {
       onPlaySound('resurrect');
-    } else if (lastOutcome.winner === 'TIE') {
+    } else if (lastOutcome.winnerId === 'TIE') {
       onPlaySound('tie');
-    } else if (lastOutcome.winner === localSeat) {
+    } else if (lastOutcome.winnerId === localId) {
       onPlaySound('win');
     } else {
       onPlaySound('lose');
     }
-  }, [lastOutcome?.round, lastOutcome?.winner, lastOutcome?.resurrectedPlayer, localSeat, onPlaySound]);
+
+    if (reducedMotion) {
+      setResolutionPhase('idle');
+      setCountUpProgress(1);
+      return;
+    }
+
+    onPlaySound('flip');
+    setResolutionPhase('flip');
+    setCountUpProgress(0);
+
+    const compareTimer = window.setTimeout(() => {
+      setResolutionPhase('compare');
+    }, 420);
+
+    let frameId = 0;
+    const startAnim = performance.now() + 420;
+    const duration = 520;
+    const tick = (now: number) => {
+      const t = Math.max(0, Math.min(1, (now - startAnim) / duration));
+      setCountUpProgress(t);
+      if (t < 1) {
+        frameId = window.requestAnimationFrame(tick);
+      }
+    };
+    frameId = window.requestAnimationFrame(tick);
+
+    const winnerTimer = window.setTimeout(() => {
+      setResolutionPhase('winner');
+      setCountUpProgress(1);
+    }, 960);
+
+    const endTimer = window.setTimeout(() => {
+      setResolutionPhase('idle');
+    }, 1500);
+
+    return () => {
+      window.clearTimeout(compareTimer);
+      window.clearTimeout(winnerTimer);
+      window.clearTimeout(endTimer);
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [lastOutcome, localSeatIndex, onPlaySound, reducedMotion, state?.players]);
+
+  const skipAnimation = () => {
+    setResolutionPhase('idle');
+    setCountUpProgress(1);
+  };
+
+  const tickerMessages = useMemo(() => {
+    if (!state) return [];
+    const source = history.length > 0 ? history : state.lastOutcome ? [state.lastOutcome] : [];
+    return source.slice(0, 4).map((item) => formatOutcomeTicker(item, state.players));
+  }, [history, state]);
 
   if (loading) {
     return (
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-12">
-        <div className="rounded-xl bg-[#161B24] border border-white/10 p-10 text-center text-sm text-stone-300">
+      <main className="max-w-5xl mx-auto px-3 sm:px-6 py-12">
+        <div className="rounded-2xl bg-[#131826]/90 border border-white/10 p-10 text-center text-sm text-stone-300">
           Synchronizing arena state...
         </div>
       </main>
@@ -84,17 +209,13 @@ export function Arena({
 
   if (error && !state) {
     return (
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
-        <div className="rounded-xl bg-[#161B24] border border-red-500/30 p-8 space-y-4">
+      <main className="max-w-3xl mx-auto px-3 sm:px-6 py-12">
+        <div className="rounded-2xl bg-[#131826]/90 border border-red-500/30 p-8 space-y-4">
           <h2 className="font-display text-xl font-bold text-red-300">Arena Error</h2>
           <p className="text-sm text-stone-300">{error}</p>
-          <button
-            type="button"
-            onClick={onLeave}
-            className="min-h-[44px] px-5 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-stone-950 font-semibold text-sm cursor-pointer"
-          >
+          <Button variant="primary" onClick={onLeave}>
             Return to Lobby
-          </button>
+          </Button>
         </div>
       </main>
     );
@@ -102,241 +223,823 @@ export function Arena({
 
   if (!state) {
     return (
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
-        <div className="rounded-xl bg-[#161B24] border border-white/10 p-8 space-y-4 text-center">
+      <main className="max-w-3xl mx-auto px-3 sm:px-6 py-12">
+        <div className="rounded-2xl bg-[#131826]/90 border border-white/10 p-8 space-y-4 text-center">
           <h2 className="font-display text-xl font-bold text-stone-100">Match Closed</h2>
           <p className="text-sm text-stone-400">
             This match session has ended or was removed when all players exited.
           </p>
-          <button
-            type="button"
-            onClick={onLeave}
-            className="min-h-[44px] px-5 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-stone-950 font-semibold text-sm cursor-pointer"
-          >
+          <Button variant="primary" onClick={onLeave}>
             Return to Lobby
-          </button>
+          </Button>
         </div>
       </main>
     );
   }
 
+  // Multiplayer Waiting Room (2-4 seats, invite link, ready states, kick, bot fill, start)
   if (mode === 'multiplayer' && matchStatus === 'waiting') {
-    const handleCopy = async () => {
-      if (!matchId || !navigator.clipboard) return;
+    const localPlayer = state.players[localSeatIndex];
+    const seatedHumans = state.players.filter((p) => p.uid !== null);
+    const allHumansReady = seatedHumans.every((p) => p.ready || p.seatIndex === 0);
+    const canStart = isHost && allHumansReady && (fillWithBots || seatedHumans.length >= 2);
+
+    const inviteUrl =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}${window.location.pathname}?room=${roomCode ?? matchId ?? ''}`
+        : roomCode ?? matchId ?? '';
+
+    const handleCopyInvite = async () => {
+      if (!navigator.clipboard) return;
       try {
-        await navigator.clipboard.writeText(matchId);
-        setCopiedId(true);
-        setTimeout(() => setCopiedId(false), 1800);
+        await navigator.clipboard.writeText(inviteUrl);
+        setCopiedInvite(true);
+        window.setTimeout(() => setCopiedInvite(false), 1800);
       } catch {
         // Ignore clipboard errors in restricted frames
       }
     };
 
     return (
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
-        <div className="rounded-xl bg-[#161B24] border border-white/10 p-6 sm:p-8 space-y-6">
-          <div className="space-y-2">
-            <h2 className="font-display text-2xl font-bold text-stone-100">
-              Waiting for Challenger
-            </h2>
-            <p className="text-sm text-stone-400">
-              Share your Match ID below or wait for a player in the public lobby list to join.
-            </p>
-          </div>
-
-          <div className="rounded-lg bg-[#0E1117] border border-white/10 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-xs text-stone-400">Match ID</p>
-              <p className="font-mono text-sm text-amber-400 truncate mt-0.5">{matchId}</p>
+      <main className="max-w-4xl mx-auto px-3 sm:px-6 py-8 sm:py-12 space-y-6">
+        <div className="rounded-2xl bg-[#131826]/95 border border-white/10 p-5 sm:p-8 space-y-6 shadow-2xl">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge tone="gold">Waiting Room</Badge>
+                <Badge tone="neutral">{state.players.length} Seats</Badge>
+                {state.teamMode === 'teams' && <Badge tone="sky">2v2 Teams</Badge>}
+              </div>
+              <h2 className="font-display text-2xl sm:text-3xl font-bold text-stone-100">
+                Prepare for Battle
+              </h2>
+              <p className="text-xs sm:text-sm text-stone-400">
+                Share the room code or invite link below. Host starts once challengers are ready.
+              </p>
             </div>
-            <button
-              type="button"
-              onClick={() => void handleCopy()}
-              className="min-h-[40px] px-4 py-2 rounded-lg border border-white/15 bg-[#1D2430] hover:bg-[#252D3B] text-stone-100 text-xs font-semibold inline-flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
+
+            <div className="flex items-center gap-2 shrink-0">
+              <Button variant="secondary" size="sm" onClick={() => void handleCopyInvite()}>
+                {copiedInvite ? (
+                  <Check className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+                ) : (
+                  <Copy className="w-4 h-4" aria-hidden="true" />
+                )}
+                {copiedInvite ? 'Copied Link' : 'Copy Invite Link'}
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-[#0B0E17] border border-white/10 p-4 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-xs text-stone-400">Room Code</p>
+              <p className="font-mono text-2xl font-bold tracking-[0.2em] text-amber-300 mt-0.5">
+                {roomCode || matchId}
+              </p>
+            </div>
+            <div className="text-xs text-stone-400 font-mono tabular-nums space-y-0.5 text-right">
+              <p>Match ID: {matchId}</p>
+              <p>
+                Seed: {state.matchSeed} · Realm: {getRealmLabel(state.activeRealm)}
+              </p>
+            </div>
+          </div>
+
+          {/* Seat Roster */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {state.players.map((seat) => {
+              const isOccupied = seat.uid !== null;
+              const isBotFillSlot = !isOccupied && fillWithBots;
+              const initials = seat.name.slice(0, 2).toUpperCase();
+
+              return (
+                <div
+                  key={seat.id}
+                  className={`rounded-xl border p-4 flex items-center justify-between gap-3 ${
+                    isOccupied
+                      ? 'bg-[#0B0E17] border-amber-400/25'
+                      : 'bg-[#0B0E17]/60 border-white/10 border-dashed'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center font-display font-bold text-sm shrink-0 ${
+                        isOccupied
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-400/40'
+                          : isBotFillSlot
+                            ? 'bg-sky-500/15 text-sky-300 border border-sky-400/30'
+                            : 'bg-white/5 text-stone-500 border border-white/10'
+                      }`}
+                    >
+                      {isOccupied ? (
+                        initials
+                      ) : isBotFillSlot ? (
+                        <Bot className="w-4 h-4" aria-hidden="true" />
+                      ) : (
+                        seat.seatIndex + 1
+                      )}
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-sm font-semibold text-stone-100 truncate">
+                          {isOccupied
+                            ? seat.name
+                            : isBotFillSlot
+                              ? 'Bot (Auto-Fill)'
+                              : 'Open Seat'}
+                        </p>
+                        {seat.seatIndex === 0 && <Badge tone="gold">Host</Badge>}
+                        {state.teamMode === 'teams' && (
+                          <Badge tone={seat.team === 0 ? 'sky' : 'war'}>
+                            {seat.team === 0 ? 'Team A' : 'Team B'}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-stone-400 mt-0.5">
+                        {isOccupied
+                          ? seat.ready || seat.seatIndex === 0
+                            ? 'Ready for Clash'
+                            : 'Waiting for Ready'
+                          : isBotFillSlot
+                            ? 'Deterministic AI joins at start'
+                            : 'Waiting for challenger...'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {isOccupied && (
+                      <Badge tone={seat.ready || seat.seatIndex === 0 ? 'emerald' : 'neutral'}>
+                        {seat.ready || seat.seatIndex === 0 ? 'Ready' : 'Not Ready'}
+                      </Badge>
+                    )}
+                    {isHost && isOccupied && seat.seatIndex > 0 && onKickSeat && (
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        aria-label={`Kick ${seat.name}`}
+                        onClick={() => onKickSeat(seat.seatIndex)}
+                      >
+                        <UserX className="w-3.5 h-3.5" aria-hidden="true" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {error && (
+            <div
+              role="alert"
+              className="rounded-xl border border-red-500/35 bg-red-500/10 p-3.5 text-xs sm:text-sm text-red-200"
             >
-              {copiedId ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-              {copiedId ? 'Copied' : 'Copy ID'}
-            </button>
-          </div>
+              {error}
+            </div>
+          )}
 
-          <div className="text-xs text-stone-400 font-mono tabular-nums flex flex-wrap gap-x-4 gap-y-1">
-            <span>Host: {p1Label}</span>
-            <span>·</span>
-            <span>Seed: {state.matchSeed}</span>
-            <span>·</span>
-            <span>Opening Realm: {getRealmLabel(state.activeRealm)}</span>
-          </div>
+          {/* Room Controls */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 border-t border-white/10">
+            <div className="flex flex-wrap items-center gap-3">
+              {isHost && onUpdateRoomOptions && (
+                <>
+                  <label className="inline-flex items-center gap-2 text-xs text-stone-200 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={fillWithBots}
+                      onChange={(e) => onUpdateRoomOptions({ fillWithBots: e.target.checked })}
+                      className="w-4 h-4 accent-amber-500"
+                    />
+                    Fill empty seats with bots
+                  </label>
 
-          <button
-            type="button"
-            onClick={onLeave}
-            className="min-h-[44px] px-5 py-2.5 rounded-lg border border-white/15 bg-[#1D2430] hover:bg-red-950/60 hover:border-red-500/40 text-stone-200 text-sm font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-          >
-            Cancel Match
-          </button>
+                  {state.players.length === 4 && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() =>
+                        onUpdateRoomOptions({
+                          teamMode: state.teamMode === 'teams' ? 'ffa' : 'teams',
+                        })
+                      }
+                    >
+                      Mode: {state.teamMode === 'teams' ? '2v2 Teams' : 'Free-for-All'}
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              <Button variant="danger" onClick={onLeave}>
+                Cancel Match
+              </Button>
+
+              {!isHost && localPlayer && onToggleReady && (
+                <Button
+                  variant={localPlayer.ready ? 'secondary' : 'primary'}
+                  onClick={onToggleReady}
+                >
+                  <UserCheck className="w-4 h-4" aria-hidden="true" />
+                  {localPlayer.ready ? 'Unready' : 'Mark Ready'}
+                </Button>
+              )}
+
+              {isHost && onStartRoom && (
+                <Button
+                  variant="primary"
+                  disabled={!canStart || submitting}
+                  onClick={onStartRoom}
+                >
+                  <Play className="w-4 h-4" aria-hidden="true" />
+                  {submitting ? 'Starting...' : 'Start Match'}
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
       </main>
     );
   }
 
-  const oppSeat: PlayerId = localSeat === 'p1' ? 'p2' : 'p1';
-  const localDeck = localSeat === 'p1' ? state.p1Deck : state.p2Deck;
-  const oppDeck = localSeat === 'p1' ? state.p2Deck : state.p1Deck;
-  const localName = localSeat === 'p1' ? p1Label : p2Label;
-  const oppName = localSeat === 'p1' ? p2Label : p1Label;
+  const localPlayer = state.players[localSeatIndex] ?? state.players[0];
+  const opponents = state.players.filter((p) => p.seatIndex !== localPlayer.seatIndex);
+  const activeOpponents = opponents.filter((p) => !p.eliminated && p.deck.length > 0);
+  const activeTurnPlayer = state.players[state.activeTurnIndex] ?? state.players[0];
 
-  const isLocalTurn = state.winner === 'NONE' && state.activeTurn === localSeat;
-  const canArmGambit = isLocalTurn && !state.gambitUsed[localSeat] && !submitting;
+  const isLocalTurn =
+    state.winner === 'NONE' &&
+    state.activeTurnIndex === localPlayer.seatIndex &&
+    !localPlayer.eliminated &&
+    localPlayer.deck.length > 0;
+  const canArmGambit = isLocalTurn && !localPlayer.gambitUsed && !submitting;
+
   const roundsIntoRealm = ((state.round - 1) % ROUNDS_PER_REALM) + 1;
+  const roundsUntilRealmChange = ROUNDS_PER_REALM - roundsIntoRealm + 1;
+  const realmTheme = REALM_THEMES[state.activeRealm];
 
-  const localTopCard = localDeck.length > 0 ? getCardById(localDeck[0]) : null;
-  const oppTopCard = oppDeck.length > 0 ? getCardById(oppDeck[0]) : null;
-  const prophecyHint = getProphecyStat(state, localSeat);
-
-  // Only reveal local card's own domain match bonus openly; do NOT leak opponent's face-down PIERCING passive before clash!
+  const localTopCard = localPlayer.deck.length > 0 ? getCardById(localPlayer.deck[0]) : null;
   const localBonusDisplay =
     localTopCard && localTopCard.domain === state.activeRealm ? 15 : 0;
 
-  const oppEffectiveDisplay =
-    oppTopCard && localTopCard && state.winner !== 'NONE'
-      ? computeEffectiveStats(oppTopCard, localTopCard, state.activeRealm)
-      : { bonus: 0 };
+  const localHasProphecy = Boolean(localTopCard && localTopCard.passive === 'PROPHECY');
+  const needsProphecyTargetPick =
+    isLocalTurn &&
+    localHasProphecy &&
+    activeOpponents.length > 1 &&
+    (!state.prophecyTarget || state.prophecyTarget.bySeat !== localPlayer.seatIndex);
 
-  const lastP1Card = lastOutcome ? getCardById(lastOutcome.p1CardId) : null;
-  const lastP2Card = lastOutcome ? getCardById(lastOutcome.p2CardId) : null;
+  const singleOrChosenProphecy = getProphecyStat(state, localPlayer.seatIndex);
 
   const handleStatSelect = (stat: StatKey) => {
     if (!isLocalTurn || submitting) return;
     onPlaySound('pick');
-    onDispatch({ type: 'PICK_STAT', player: localSeat, stat });
+    onDispatch({ type: 'PICK_STAT', playerIndex: localPlayer.seatIndex, stat });
   };
 
   const handleToggleGambit = () => {
     if (!canArmGambit) return;
     onPlaySound('gambit');
-    onDispatch({ type: 'TOGGLE_GAMBIT', player: localSeat });
+    onDispatch({ type: 'TOGGLE_GAMBIT', playerIndex: localPlayer.seatIndex });
   };
 
+  const handleSelectProphecyTarget = (targetIndex: number) => {
+    if (!isLocalTurn || submitting) return;
+    onPlaySound('pick');
+    onDispatch({
+      type: 'SELECT_PROPHECY_TARGET',
+      playerIndex: localPlayer.seatIndex,
+      targetIndex,
+    });
+  };
+
+  const winnerBannerText = (() => {
+    if (state.winner === 'DRAW') return 'Match Ended in a Draw';
+    if (state.winner === 'TEAM_0') {
+      const names = state.players
+        .filter((p) => p.team === 0)
+        .map((p) => p.name)
+        .join(' & ');
+      return `Team A Wins (${names})`;
+    }
+    if (state.winner === 'TEAM_1') {
+      const names = state.players
+        .filter((p) => p.team === 1)
+        .map((p) => p.name)
+        .join(' & ');
+      return `Team B Wins (${names})`;
+    }
+    const winPlayer = state.players.find((p) => p.id === state.winner);
+    return `${winPlayer?.name ?? state.winner} Wins the Match`;
+  })();
+
+  const isResolving = resolutionPhase !== 'idle' && lastOutcome !== null;
+
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-      {/* Unobtrusive Top Arena HUD */}
-      <section className="rounded-xl bg-[#161B24] border border-white/10 px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs sm:text-sm">
-          <div className="flex items-center gap-2">
+    <main className="max-w-7xl mx-auto px-3 sm:px-6 py-5 sm:py-7 space-y-5">
+      {/* Persistent Top HUD */}
+      <section className="rounded-2xl bg-[#131826]/95 border border-white/10 px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs sm:text-sm">
+          <div className="flex items-center gap-1.5">
             <span className="text-stone-400">Round</span>
-            <span className="font-mono tabular-nums font-semibold text-stone-100">
-              {state.round}
+            <span className="font-mono tabular-nums font-bold text-stone-100">
+              {Math.min(state.round, state.maxRounds)}/{state.maxRounds}
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <RealmIcon realm={state.activeRealm} className="w-4 h-4 text-amber-400" />
-            <span className="font-semibold text-amber-300">
-              {getRealmLabel(state.activeRealm)} Realm
+          <div
+            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-1 ${realmTheme.bannerClass}`}
+          >
+            <RealmIcon realm={state.activeRealm} className={`w-4 h-4 ${realmTheme.textClass}`} />
+            <span className={`font-semibold ${realmTheme.textClass}`}>
+              {realmTheme.label} Realm (+15)
             </span>
-            <span className="text-stone-400 font-mono tabular-nums">
-              ({roundsIntoRealm}/{ROUNDS_PER_REALM})
+            <span className="text-[11px] font-mono tabular-nums text-stone-300">
+              · Changes in {roundsUntilRealmChange} {roundsUntilRealmChange === 1 ? 'round' : 'rounds'}
             </span>
-          </div>
-
-          <div className="flex items-center gap-2 font-mono tabular-nums">
-            <span className="text-stone-400">{localName}:</span>
-            <span className="font-semibold text-stone-100">{localDeck.length}</span>
-            <span className="text-stone-600">/</span>
-            <span className="text-stone-400">{oppName}:</span>
-            <span className="font-semibold text-stone-100">{oppDeck.length}</span>
           </div>
 
           {state.warPot.length > 0 && (
-            <div className="font-mono tabular-nums text-amber-300 font-semibold">
+            <Badge tone="gold" className="font-mono tabular-nums">
               War Pot: {state.warPot.length} cards
-            </div>
+            </Badge>
+          )}
+
+          {mode === 'multiplayer' && state.winner === 'NONE' && (
+            <Badge
+              tone={turnSecondsRemaining <= 5 ? 'war' : 'neutral'}
+              className="font-mono tabular-nums"
+            >
+              <Clock className="w-3.5 h-3.5" aria-hidden="true" />
+              {turnSecondsRemaining}s
+            </Badge>
           )}
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onToggleMuted}
             aria-label={muted ? 'Unmute sound effects' : 'Mute sound effects'}
-            className="min-h-[40px] px-3 py-1.5 rounded-lg border border-white/15 bg-[#1D2430] hover:bg-[#252D3B] text-stone-200 text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
           >
             {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
             <span className="hidden sm:inline">{muted ? 'Muted' : 'Sound'}</span>
-          </button>
+          </Button>
 
-          <button
-            type="button"
-            onClick={onLeave}
-            className="min-h-[40px] px-3.5 py-1.5 rounded-lg border border-white/15 bg-[#1D2430] hover:bg-red-950/60 hover:border-red-500/40 text-stone-200 text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
-          >
+          <Button variant="danger" size="sm" onClick={onLeave}>
             <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Leave Match</span>
-          </button>
+          </Button>
         </div>
       </section>
+
+      {/* Deck Standings Strip */}
+      <section className="flex flex-wrap items-center gap-2">
+        {state.players.map((p) => {
+          const isTurn = state.winner === 'NONE' && p.seatIndex === state.activeTurnIndex;
+          const isSelf = p.seatIndex === localPlayer.seatIndex;
+          return (
+            <div
+              key={p.id}
+              className={`rounded-xl border px-3 py-2 text-xs flex items-center gap-2 ${
+                isTurn
+                  ? 'bg-amber-500/15 border-amber-400/50 text-amber-200'
+                  : p.eliminated
+                    ? 'bg-[#0D111C]/70 border-white/5 text-stone-500'
+                    : 'bg-[#131826]/80 border-white/10 text-stone-200'
+              }`}
+            >
+              <span className="font-semibold truncate max-w-[120px]">
+                {p.name}
+                {isSelf ? ' (You)' : ''}
+              </span>
+              {state.teamMode === 'teams' && (
+                <Badge tone={p.team === 0 ? 'sky' : 'war'}>
+                  {p.team === 0 ? 'A' : 'B'}
+                </Badge>
+              )}
+              <span className="font-mono tabular-nums font-bold">
+                {p.deck.length}
+              </span>
+              {p.eliminated && <span className="text-rose-400 font-medium">Out</span>}
+              {p.away && !p.eliminated && <Badge tone="gold">Away</Badge>}
+            </div>
+          );
+        })}
+      </section>
+
+      {localPlayer.away && state.winner === 'NONE' && onRejoin && (
+        <div
+          role="status"
+          className="rounded-xl border border-amber-400/40 bg-amber-500/15 p-4 flex flex-wrap items-center justify-between gap-3"
+        >
+          <div className="flex items-center gap-2.5 text-sm text-amber-100">
+            <ShieldAlert className="w-5 h-5 text-amber-300 shrink-0" aria-hidden="true" />
+            <span>You were marked Away after a turn timeout. Rejoin to resume manual control.</span>
+          </div>
+          <Button variant="primary" size="sm" onClick={onRejoin}>
+            Rejoin Match
+          </Button>
+        </div>
+      )}
 
       {error && (
         <div
           role="alert"
-          className="rounded-lg border border-red-500/35 bg-red-500/10 p-3.5 text-xs sm:text-sm text-red-200"
+          className="rounded-xl border border-red-500/35 bg-red-500/10 p-3.5 text-xs sm:text-sm text-red-200"
         >
           {error}
         </div>
       )}
 
-      {/* Victory / Defeat / Draw End Banner */}
+      {/* Game-Over Screen & Match Summary */}
       {state.winner !== 'NONE' && (
         <section
           aria-label="Match result"
-          className="rounded-xl bg-[#161B24] border border-amber-500/40 p-6 sm:p-8 text-center space-y-4"
+          className="rounded-2xl bg-gradient-to-br from-[#192036] via-[#131826] to-[#0E121E] border border-amber-400/40 p-6 sm:p-8 space-y-6 shadow-2xl"
         >
-          <h2 className="font-display text-2xl sm:text-3xl font-bold text-amber-400">
-            {state.winner === 'DRAW'
-              ? 'Match Ended in a Draw'
-              : state.winner === localSeat
-                ? `${localName} Wins the Match`
-                : `${oppName} Wins the Match`}
-          </h2>
-          <p className="text-sm text-stone-300 font-mono tabular-nums">
-            Final Cards — {localName}: {localDeck.length} · {oppName}: {oppDeck.length} · Rounds Played: {state.round - 1}
-          </p>
+          <div className="text-center space-y-2">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center mx-auto text-amber-300">
+              <Crown className="w-6 h-6" aria-hidden="true" />
+            </div>
+            <h2 className="font-display text-2xl sm:text-4xl font-bold text-amber-300">
+              {winnerBannerText}
+            </h2>
+            <p className="text-xs sm:text-sm text-stone-300 font-mono tabular-nums">
+              Rounds Resolved: {state.lastOutcome?.round ?? state.round - 1} of {MAX_ROUNDS}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Final Card Counts */}
+            <div className="rounded-xl bg-[#0B0E17] border border-white/10 p-4 space-y-2.5">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-400">
+                Final Standings
+              </h3>
+              <ul className="space-y-1.5 text-xs">
+                {[...state.players]
+                  .sort((a, b) => b.deck.length - a.deck.length)
+                  .map((p) => (
+                    <li key={p.id} className="flex items-center justify-between text-stone-200">
+                      <span className="truncate font-medium">
+                        {p.name}
+                        {state.teamMode === 'teams' ? ` (Team ${p.team === 0 ? 'A' : 'B'})` : ''}
+                      </span>
+                      <span className="font-mono tabular-nums font-bold text-amber-300">
+                        {p.deck.length} cards · {p.roundsWon}W
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+
+            {/* Rounds Won per Stat */}
+            <div className="rounded-xl bg-[#0B0E17] border border-white/10 p-4 space-y-2.5">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-400">
+                Rounds Won by Stat
+              </h3>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {STAT_KEYS.map((stat) => (
+                  <div
+                    key={stat}
+                    className="rounded-lg bg-[#131826] border border-white/10 px-2.5 py-2 flex items-center justify-between"
+                  >
+                    <span className="inline-flex items-center gap-1.5 text-stone-300">
+                      <StatIcon stat={stat} className="w-3.5 h-3.5 text-amber-300" />
+                      {STAT_META[stat].label}
+                    </span>
+                    <span className="font-mono tabular-nums font-bold text-stone-100">
+                      {state.statWins[stat]}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Best Clash Card */}
+            <div className="rounded-xl bg-[#0B0E17] border border-white/10 p-4 space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-400 inline-flex items-center gap-1.5">
+                <Award className="w-3.5 h-3.5 text-amber-300" aria-hidden="true" />
+                Best Winning Clash
+              </h3>
+              {state.bestWin ? (
+                <div className="space-y-1 text-xs">
+                  <p className="font-display text-base font-bold text-amber-300">
+                    {getCardById(state.bestWin.cardId).name}
+                  </p>
+                  <p className="text-stone-300">
+                    Commanded by{' '}
+                    <span className="font-semibold text-stone-100">
+                      {state.players.find((p) => p.id === state.bestWin?.playerId)?.name}
+                    </span>
+                  </p>
+                  <p className="font-mono tabular-nums text-stone-400">
+                    {STAT_META[state.bestWin.stat].label} {state.bestWin.effectiveValue} · Round{' '}
+                    {state.bestWin.round}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-stone-400">No decisive round clash recorded.</p>
+              )}
+            </div>
+          </div>
+
           <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
-            {mode === 'solo' && (
-              <button
-                type="button"
+            {(mode === 'solo' || isHost) && (
+              <Button
+                variant="primary"
+                size="lg"
                 onClick={() => onDispatch({ type: 'RESET_MATCH', matchSeed: state.matchSeed })}
-                className="min-h-[44px] px-5 py-2.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-stone-950 font-semibold text-sm inline-flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
               >
                 <RotateCcw className="w-4 h-4" aria-hidden="true" />
-                Play Again
-              </button>
+                Rematch
+              </Button>
             )}
-            <button
-              type="button"
-              onClick={onLeave}
-              className="min-h-[44px] px-5 py-2.5 rounded-lg border border-white/15 bg-[#1D2430] hover:bg-[#252D3B] text-stone-100 font-semibold text-sm whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              Return to Lobby
-            </button>
+            <Button variant="secondary" size="lg" onClick={onLeave}>
+              Back to Lobby
+            </Button>
           </div>
         </section>
       )}
 
-      {/* Main Battle Table */}
-      <section className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px_minmax(0,1fr)] gap-6 items-start">
-        {/* Local Player Card */}
-        <div className="space-y-3 order-2 lg:order-1">
-          <div className="flex items-center justify-between text-xs text-stone-400 px-1">
-            <span>{localName} ({localSeat.toUpperCase()})</span>
-            <span className="font-mono tabular-nums">
-              Gambit: {state.gambitUsed[localSeat] ? 'Used' : 'Ready'} · Resurrection: {state.resurrectionUsed[localSeat] ? 'Used' : 'Available'}
+      {/* Opponents Row (1-3 Opponents) */}
+      <section aria-label="Opponents" className="space-y-2">
+        <div
+          className={`grid gap-4 ${
+            opponents.length === 1
+              ? 'grid-cols-1 max-w-sm mx-auto'
+              : opponents.length === 2
+                ? 'grid-cols-2 max-w-3xl mx-auto'
+                : 'grid-cols-1 sm:grid-cols-3'
+          }`}
+        >
+          {opponents.map((opp) => {
+            const oppTopCard = opp.deck.length > 0 ? getCardById(opp.deck[0]) : null;
+            const isProphecyTargeted =
+              state.prophecyTarget?.bySeat === localPlayer.seatIndex &&
+              state.prophecyTarget?.targetSeat === opp.seatIndex;
+            const hintForOpp =
+              state.winner !== 'NONE'
+                ? null
+                : activeOpponents.length === 1 && singleOrChosenProphecy
+                  ? singleOrChosenProphecy
+                  : isProphecyTargeted
+                    ? getProphecyStatForTarget(state, localPlayer.seatIndex, opp.seatIndex)
+                    : null;
+
+            return (
+              <div key={opp.id} className="space-y-2 min-w-0">
+                <div className="flex items-center justify-between gap-2 text-xs text-stone-300 px-1">
+                  <span className="font-semibold truncate">
+                    {opp.name} ({opp.deck.length})
+                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {opp.gambitUsed && <Badge tone="neutral">Gambit Used</Badge>}
+                    {opp.resurrectionUsed && <Badge tone="neutral">Res Used</Badge>}
+                  </div>
+                </div>
+
+                {oppTopCard ? (
+                  <Card
+                    card={oppTopCard}
+                    ownerLabel={opp.name}
+                    activeRealm={state.activeRealm}
+                    faceDown={state.winner === 'NONE'}
+                    compact={opponents.length > 1}
+                    prophecyHint={hintForOpp}
+                  />
+                ) : (
+                  <div className="rounded-2xl bg-[#131826]/70 border border-white/10 p-6 text-center text-xs text-stone-400 min-h-[200px] flex items-center justify-center">
+                    {opp.eliminated ? 'Eliminated (0 cards)' : 'No cards left'}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Center Battlefield: Turn Indicator, Prophecy Picker, Animated Round Resolution & Controls */}
+      <section className="rounded-2xl bg-[#131826]/95 border border-white/10 p-4 sm:p-6 space-y-4 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-0.5">
+            <p className="text-xs uppercase tracking-wider text-stone-400 font-semibold">
+              Battlefield Turn
+            </p>
+            <p className="font-display text-lg sm:text-xl font-bold text-amber-300">
+              {state.winner !== 'NONE'
+                ? 'Match Complete'
+                : isLocalTurn
+                  ? 'Your Turn — Pick a Stat'
+                  : `${activeTurnPlayer.name} is Choosing...`}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone={localPlayer.resurrectionUsed ? 'neutral' : 'emerald'}>
+              <Flame className="w-3.5 h-3.5" aria-hidden="true" />
+              Resurrection: {localPlayer.resurrectionUsed ? 'Used' : 'Ready'}
+            </Badge>
+
+            {state.winner === 'NONE' && (
+              <Tooltip
+                content={
+                  localPlayer.gambitUsed
+                    ? 'Gambit already expended this match.'
+                    : 'Invert this round so the lowest effective stat wins.'
+                }
+              >
+                <Button
+                  variant={state.gambitArmed && isLocalTurn ? 'primary' : 'secondary'}
+                  size="sm"
+                  disabled={!canArmGambit}
+                  aria-pressed={state.gambitArmed}
+                  onClick={handleToggleGambit}
+                >
+                  <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                  {localPlayer.gambitUsed
+                    ? 'Gambit Used'
+                    : state.gambitArmed
+                      ? 'Gambit Armed (Lowest Wins)'
+                      : 'Use Gambit'}
+                </Button>
+              </Tooltip>
+            )}
+          </div>
+        </div>
+
+        {/* Multi-Opponent Prophecy Target Picker */}
+        {needsProphecyTargetPick && (
+          <div className="rounded-xl border border-amber-400/40 bg-amber-500/10 p-3.5 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs sm:text-sm text-amber-200">
+              <Eye className="w-4 h-4 shrink-0" aria-hidden="true" />
+              <span>
+                <strong>Prophecy Active:</strong> Choose an opponent to reveal one stat of their top card:
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {activeOpponents.map((opp) => (
+                <Button
+                  key={opp.id}
+                  variant="primary"
+                  size="sm"
+                  onClick={() => handleSelectProphecyTarget(opp.seatIndex)}
+                >
+                  Spy {opp.name}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ~1.5s Skippable Animated Clash Sequence */}
+        {isResolving && lastOutcome && (
+          <div
+            data-testid="clash-resolution-stage"
+            className="rounded-2xl border border-amber-400/45 bg-[#0B0E17] p-4 space-y-4"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-xs font-semibold text-amber-300">
+                <Badge tone="gold">
+                  Round {lastOutcome.round} · {STAT_META[lastOutcome.stat].label}
+                </Badge>
+                <span>
+                  {resolutionPhase === 'flip'
+                    ? 'Flipping Deities...'
+                    : resolutionPhase === 'compare'
+                      ? 'Comparing Power...'
+                      : lastOutcome.winnerId === 'TIE'
+                        ? 'Deadlock -> War Pot!'
+                        : `${
+                            state.players.find((p) => p.id === lastOutcome.winnerId)?.name ??
+                            lastOutcome.winnerId
+                          } Triumphs!`}
+                </span>
+              </div>
+              <Button variant="ghost" size="sm" onClick={skipAnimation}>
+                <FastForward className="w-3.5 h-3.5" aria-hidden="true" />
+                Skip
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {lastOutcome.entries.map((entry) => {
+                const playedCard = getCardById(entry.cardId);
+                const owner = state.players[entry.seatIndex];
+                const isWinner =
+                  resolutionPhase === 'winner' && entry.playerId === lastOutcome.winnerId;
+                const isLoser =
+                  resolutionPhase === 'winner' &&
+                  lastOutcome.winnerId !== 'TIE' &&
+                  entry.playerId !== lastOutcome.winnerId;
+
+                return (
+                  <Card
+                    key={entry.playerId}
+                    card={playedCard}
+                    ownerLabel={owner?.name}
+                    activeRealm={state.activeRealm}
+                    realmBonus={entry.bonus}
+                    bonusNegated={entry.pierced}
+                    faceDown={resolutionPhase === 'flip'}
+                    selectedStat={lastOutcome.stat}
+                    outcomeState={isWinner ? 'winner' : isLoser ? 'loser' : 'neutral'}
+                    countUpProgress={countUpProgress}
+                    compact
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Latest Clash Summary & Event Log Ticker */}
+        {lastOutcome && (
+          <div
+            data-testid="last-outcome-panel"
+            className="rounded-xl bg-[#0B0E17] border border-white/10 p-4 space-y-2.5"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-stone-400">
+              <span className="font-mono tabular-nums font-semibold text-stone-200">
+                Round {lastOutcome.round} Result · {STAT_META[lastOutcome.stat].label}
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {lastOutcome.gambitActive && <Badge tone="gold">Gambit Inverted</Badge>}
+                {lastOutcome.resurrectedPlayers.length > 0 && (
+                  <Badge tone="sky">
+                    Resurrected:{' '}
+                    {lastOutcome.resurrectedPlayers
+                      .map((id) => state.players.find((p) => p.id === id)?.name ?? id)
+                      .join(', ')}
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              {lastOutcome.entries.map((entry) => {
+                const card = getCardById(entry.cardId);
+                const owner = state.players[entry.seatIndex];
+                const isRoundWinner = entry.playerId === lastOutcome.winnerId;
+                return (
+                  <div
+                    key={entry.playerId}
+                    className={`rounded-lg border px-3 py-2 ${
+                      isRoundWinner
+                        ? 'border-amber-400/50 bg-amber-500/10'
+                        : 'border-white/10 bg-[#131826]'
+                    }`}
+                  >
+                    <p className="text-[11px] text-stone-400 truncate">{owner?.name}</p>
+                    <p className="font-semibold text-stone-100 truncate">{card.name}</p>
+                    <p className="font-mono tabular-nums text-amber-300 font-bold mt-0.5">
+                      {entry.effectiveValue}
+                      {entry.bonus > 0 && (
+                        <span className="text-emerald-400 text-[11px] ml-1">(+{entry.bonus})</span>
+                      )}
+                      {entry.pierced && (
+                        <span className="text-rose-400 text-[11px] ml-1">(Pierced)</span>
+                      )}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {tickerMessages.length > 0 && (
+              <div className="pt-2 border-t border-white/10 space-y-1">
+                {tickerMessages.slice(0, 3).map((msg, i) => (
+                  <p
+                    key={`${i}-${msg}`}
+                    className={`text-xs ${i === 0 ? 'text-stone-200 font-medium' : 'text-stone-400'}`}
+                  >
+                    {msg}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* Local Player Hand / Active Card */}
+      <section aria-label="Your top card" className="space-y-3">
+        <div className="max-w-sm mx-auto space-y-2">
+          <div className="flex items-center justify-between text-xs text-stone-300 px-1">
+            <span className="font-semibold">
+              {localPlayer.name} ({localPlayer.id.toUpperCase()})
+            </span>
+            <span className="font-mono tabular-nums text-stone-400">
+              {localPlayer.deck.length} cards in deck
             </span>
           </div>
+
           {localTopCard ? (
-            <MythCardView
+            <Card
               card={localTopCard}
-              ownerLabel={localName}
+              ownerLabel={localPlayer.name}
               activeRealm={state.activeRealm}
               realmBonus={localBonusDisplay}
               interactive={isLocalTurn}
@@ -345,197 +1048,21 @@ export function Arena({
               onSelectStat={handleStatSelect}
             />
           ) : (
-            <div className="rounded-xl bg-[#161B24] border border-white/10 p-8 text-center text-sm text-stone-400 min-h-[410px] flex items-center justify-center">
-              No cards remaining in deck
+            <div className="rounded-2xl bg-[#131826]/80 border border-white/10 p-8 text-center text-sm text-stone-400 min-h-[260px] flex items-center justify-center">
+              {localPlayer.eliminated
+                ? 'You have been eliminated (0 cards remaining). Spectating match...'
+                : 'No cards remaining in deck'}
             </div>
           )}
-        </div>
 
-        {/* Center Clash & Tactical Controls */}
-        <div className="space-y-4 order-1 lg:order-2">
-          <div className="rounded-xl bg-[#161B24] border border-white/10 p-5 space-y-4">
-            <div className="text-center space-y-1">
-              <p className="text-xs font-medium text-stone-400">
-                {state.winner !== 'NONE'
-                  ? 'Match Complete'
-                  : isLocalTurn
-                    ? 'Your Turn — Pick a Stat'
-                    : `${oppName} is Choosing...`}
-              </p>
-              <div className="inline-flex items-center gap-2 text-sm font-semibold text-amber-300">
-                <RealmIcon realm={state.activeRealm} className="w-4 h-4" />
-                <span>{getRealmLabel(state.activeRealm)} (+15 Domain Bonus)</span>
-              </div>
-            </div>
-
-            {state.winner === 'NONE' && (
-              <button
-                type="button"
-                disabled={!canArmGambit}
-                onClick={handleToggleGambit}
-                aria-pressed={state.gambitArmed}
-                className={`w-full min-h-[44px] px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${
-                  state.gambitArmed
-                    ? 'bg-amber-500 text-stone-950 hover:bg-amber-400'
-                    : 'bg-[#1D2430] border border-amber-500/35 text-amber-200 hover:bg-[#252D3B]'
-                }`}
-              >
-                {state.gambitUsed[localSeat]
-                  ? 'Gambit Expended'
-                  : state.gambitArmed
-                    ? 'Gambit Armed (Lowest Wins)'
-                    : 'Use Gambit (Invert Round)'}
-              </button>
-            )}
-
-            {state.warPot.length > 0 && (
-              <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 text-center">
-                <p className="text-xs font-semibold text-amber-300 font-mono tabular-nums">
-                  War Pot Active: {state.warPot.length} Cards at Stake
-                </p>
-                <p className="text-xs text-stone-300 mt-0.5">
-                  Next round winner claims the entire pot.
-                </p>
-              </div>
-            )}
-
-            {lastOutcome && lastP1Card && lastP2Card && (
-              <div
-                data-testid="last-outcome-panel"
-                className="rounded-lg bg-[#0E1117] border border-white/10 p-4 space-y-2.5"
-              >
-                <div className="flex items-center justify-between text-xs text-stone-400">
-                  <span className="font-mono tabular-nums">Round {lastOutcome.round} Result</span>
-                  <span>{STAT_LABELS[lastOutcome.stat]}</span>
-                </div>
-
-                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-sm">
-                  <div className="min-w-0">
-                    <p className="font-semibold text-stone-100 truncate">
-                      {localSeat === 'p1' ? lastP1Card.name : lastP2Card.name}
-                    </p>
-                    <p className="font-mono tabular-nums text-xs text-stone-400">
-                      {localSeat === 'p1' ? lastOutcome.p1Effective : lastOutcome.p2Effective}
-                      {(localSeat === 'p1' ? lastOutcome.p1Bonus : lastOutcome.p2Bonus) > 0 &&
-                        ` (+${localSeat === 'p1' ? lastOutcome.p1Bonus : lastOutcome.p2Bonus})`}
-                    </p>
-                  </div>
-                  <span className="text-xs text-stone-500 font-mono">vs</span>
-                  <div className="min-w-0 text-right">
-                    <p className="font-semibold text-stone-100 truncate">
-                      {localSeat === 'p1' ? lastP2Card.name : lastP1Card.name}
-                    </p>
-                    <p className="font-mono tabular-nums text-xs text-stone-400">
-                      {localSeat === 'p1' ? lastOutcome.p2Effective : lastOutcome.p1Effective}
-                      {(localSeat === 'p1' ? lastOutcome.p2Bonus : lastOutcome.p1Bonus) > 0 &&
-                        ` (+${localSeat === 'p1' ? lastOutcome.p2Bonus : lastOutcome.p1Bonus})`}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-white/10 text-xs space-y-1">
-                  <p
-                    className={`font-semibold ${
-                      lastOutcome.winner === 'TIE'
-                        ? 'text-amber-300'
-                        : lastOutcome.winner === localSeat
-                          ? 'text-emerald-400'
-                          : 'text-red-400'
-                    }`}
-                  >
-                    {lastOutcome.winner === 'TIE'
-                      ? 'Tied Clash — Both cards moved to War Pot'
-                      : lastOutcome.winner === localSeat
-                        ? `You won Round ${lastOutcome.round}${lastOutcome.potWon > 0 ? ` (+${lastOutcome.potWon} pot)` : ''}`
-                        : `${oppName} won Round ${lastOutcome.round}${lastOutcome.potWon > 0 ? ` (+${lastOutcome.potWon} pot)` : ''}`}
-                  </p>
-                  {lastOutcome.gambitActive && (
-                    <p className="text-amber-300">Gambit Inverted: Lowest stat won</p>
-                  )}
-                  {lastOutcome.resurrectedPlayer && (
-                    <p className="text-sky-300">
-                      Resurrection: {lastOutcome.resurrectedPlayer === localSeat ? localName : oppName}'s card returned to deck bottom
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Opponent Card */}
-        <div className="space-y-3 order-3">
-          <div className="flex items-center justify-between text-xs text-stone-400 px-1">
-            <span>{oppName} ({oppSeat.toUpperCase()})</span>
-            <span className="font-mono tabular-nums">
-              Gambit: {state.gambitUsed[oppSeat] ? 'Used' : 'Ready'}
-            </span>
-          </div>
-          {oppTopCard ? (
-            <MythCardView
-              card={oppTopCard}
-              ownerLabel={oppName}
-              activeRealm={state.activeRealm}
-              realmBonus={oppEffectiveDisplay.bonus}
-              faceDown={state.winner === 'NONE'}
-              prophecyHint={state.winner === 'NONE' ? prophecyHint : null}
-            />
-          ) : (
-            <div className="rounded-xl bg-[#161B24] border border-white/10 p-8 text-center text-sm text-stone-400 min-h-[410px] flex items-center justify-center">
-              No cards remaining in deck
-            </div>
+          {localTopCard && localTopCard.passive !== 'NONE' && (
+            <p className="text-[11px] text-center text-stone-400 inline-flex items-center justify-center gap-1.5 w-full">
+              <PassiveIcon passive={localTopCard.passive} className="w-3.5 h-3.5 text-amber-300" />
+              <span>{PASSIVE_META[localTopCard.passive].shortSummary}</span>
+            </p>
           )}
         </div>
       </section>
-
-      {/* Round History */}
-      {history.length > 0 && (
-        <section className="rounded-xl bg-[#161B24] border border-white/10 p-5 space-y-3">
-          <h3 className="font-display text-base font-bold text-stone-100">
-            Recent Clashes
-          </h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-white/10 text-stone-400">
-                  <th className="py-2 pr-4 font-medium">Round</th>
-                  <th className="py-2 pr-4 font-medium">Stat</th>
-                  <th className="py-2 pr-4 font-medium">{p1Label}</th>
-                  <th className="py-2 pr-4 font-medium">{p2Label}</th>
-                  <th className="py-2 font-medium">Outcome</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5 font-mono tabular-nums">
-                {history.slice(0, 8).map((item) => {
-                  const c1 = getCardById(item.p1CardId);
-                  const c2 = getCardById(item.p2CardId);
-                  return (
-                    <tr key={item.round} className="text-stone-300">
-                      <td className="py-2 pr-4">{item.round}</td>
-                      <td className="py-2 pr-4 font-sans">{STAT_LABELS[item.stat]}</td>
-                      <td className="py-2 pr-4">
-                        <span className="font-sans">{c1.name}</span> ({item.p1Effective})
-                      </td>
-                      <td className="py-2 pr-4">
-                        <span className="font-sans">{c2.name}</span> ({item.p2Effective})
-                      </td>
-                      <td className="py-2 font-sans">
-                        {item.winner === 'TIE'
-                          ? 'Tie -> War Pot'
-                          : item.winner === 'p1'
-                            ? `${p1Label} won`
-                            : `${p2Label} won`}
-                        {item.gambitActive ? ' · Gambit' : ''}
-                        {item.resurrectedPlayer ? ' · Resurrected' : ''}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
     </main>
   );
 }
