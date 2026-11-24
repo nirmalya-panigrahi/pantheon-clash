@@ -66,19 +66,26 @@ export interface CreateRoomParams {
   fillWithBots?: boolean;
 }
 
-export async function createMatchLobby({
+export interface CreateRoomResultPayload {
+  matchId: string;
+  payload: Omit<FirestoreMatchDocument, 'turnStartedAt' | 'createdAt' | 'updatedAt'> & {
+    turnStartedAt: unknown;
+    createdAt: unknown;
+    updatedAt: unknown;
+  };
+}
+
+export function buildCreateMatchPayload({
   hostUid,
   hostName,
   matchSeed,
   maxPlayers = 2,
   teamMode = 'ffa',
   fillWithBots = false,
-}: CreateRoomParams): Promise<string> {
-  const firestore = requireDb();
+}: CreateRoomParams): CreateRoomResultPayload {
   const seed = normalizeSeed(matchSeed);
   const matchId = generateMatchId(seed);
   const roomCode = generateRoomCode(seed);
-  const path = `matches/${matchId}`;
 
   const playerConfigs = Array.from({ length: maxPlayers }, (_, idx) =>
     idx === 0
@@ -102,19 +109,28 @@ export async function createMatchLobby({
     players: playerConfigs,
   });
 
-  const payload = {
-    ...initialState,
+  return {
     matchId,
-    roomCode,
-    status: 'waiting' as const,
-    hostUid,
-    maxPlayers,
-    fillWithBots,
-    activePlayers: [hostUid],
-    turnStartedAt: serverTimestamp(),
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+    payload: {
+      ...initialState,
+      matchId,
+      roomCode,
+      status: 'waiting' as const,
+      hostUid,
+      maxPlayers,
+      fillWithBots,
+      activePlayers: [hostUid],
+      turnStartedAt: serverTimestamp(),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    },
   };
+}
+
+export async function createMatchLobby(params: CreateRoomParams): Promise<string> {
+  const firestore = requireDb();
+  const { matchId, payload } = buildCreateMatchPayload(params);
+  const path = `matches/${matchId}`;
 
   try {
     await setDoc(doc(firestore, 'matches', matchId), payload);
@@ -166,9 +182,12 @@ export async function joinMatchLobby(
       }
       const data = snap.data() as FirestoreMatchDocument;
 
-      // Allow rejoining an active match if user already holds a seat
+      // Allow rejoining an active match (or returning to a waiting seat) if user already holds a seat
       const existingSeatIdx = data.players.findIndex((p) => p.uid === guestUid);
       if (existingSeatIdx >= 0) {
+        if (data.status === 'waiting') {
+          return;
+        }
         const nextPlayers = data.players.map((p, idx) =>
           idx === existingSeatIdx ? { ...p, away: false } : p,
         );
@@ -411,14 +430,19 @@ export async function setSeatAwayStatus(
       const data = snap.data() as FirestoreMatchDocument;
       if (data.status !== 'active') return;
       const idx = data.players.findIndex((p) => p.uid === uid);
-      if (idx < 0 || data.players[idx].away === away) return;
+      if (idx < 0) return;
+
+      const isAlreadyInActive = data.activePlayers.includes(uid);
+      if (data.players[idx].away === away && isAlreadyInActive) return;
 
       const nextPlayers = data.players.map((p, i) =>
         i === idx ? { ...p, away } : p,
       );
+      const nextActive = Array.from(new Set([...data.activePlayers, uid]));
 
       tx.update(matchRef, {
         players: nextPlayers,
+        activePlayers: nextActive,
         updatedAt: serverTimestamp(),
       });
     });

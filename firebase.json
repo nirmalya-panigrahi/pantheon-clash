@@ -1,0 +1,8 @@
+{
+  "firestore": [
+    {
+      "database": "ai-studio-android-tactical-bf2dc554-7747-49b7-86a8-8f7272fe236a",
+      "rules": "firestore.rules"
+    }
+  ]
+}
