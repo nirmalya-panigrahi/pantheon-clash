@@ -35,6 +35,12 @@ export interface MythCard {
   stats: CardStats;
 }
 
+export type MatchPreset = 'blitz' | 'standard' | 'classic';
+
+export type GameMode = 'points' | 'classic';
+
+export type RoundPhase = 'attack' | 'defend';
+
 export interface PlayerState {
   id: SeatId;
   seatIndex: number;
@@ -43,6 +49,7 @@ export interface PlayerState {
   uid: string | null;
   team: 0 | 1;
   deck: string[];
+  score: number;
   resurrectionUsed: boolean;
   gambitUsed: boolean;
   eliminated: boolean;
@@ -72,6 +79,14 @@ export interface RoundOutcome {
   tiedPlayerIds: SeatId[];
   potWon: number;
   potSizeAfter: number;
+  pointsAwarded: number;
+}
+
+export interface PendingClash {
+  leaderSeat: number;
+  stat: StatKey;
+  gambitActive: boolean;
+  selections: Record<string, string>;
 }
 
 export interface ProphecyTarget {
@@ -92,13 +107,17 @@ export interface BestWinRecord {
 
 export interface MatchState {
   matchSeed: number;
+  matchPreset: MatchPreset;
+  gameMode: GameMode;
   round: number;
   maxRounds: number;
   teamMode: TeamMode;
+  roundPhase: RoundPhase;
   activeTurnIndex: number;
   activeRealm: Realm;
   players: PlayerState[];
   warPot: string[];
+  pendingClash: PendingClash | null;
   gambitArmed: boolean;
   prophecyTarget: ProphecyTarget | null;
   statWins: Record<StatKey, number>;
@@ -117,8 +136,9 @@ export interface PlayerSeedConfig {
 export type MatchAction =
   | { type: 'TOGGLE_GAMBIT'; playerIndex: number }
   | { type: 'SELECT_PROPHECY_TARGET'; playerIndex: number; targetIndex: number }
-  | { type: 'PICK_STAT'; playerIndex: number; stat: StatKey; useGambit?: boolean }
-  | { type: 'RESET_MATCH'; matchSeed?: number };
+  | { type: 'PICK_STAT'; playerIndex: number; stat: StatKey; handIndex?: number; useGambit?: boolean }
+  | { type: 'DEFEND_CARD'; playerIndex: number; handIndex: number }
+  | { type: 'RESET_MATCH'; matchSeed?: number; matchPreset?: MatchPreset };
 
 export interface ProphecyHint {
   stat: StatKey;

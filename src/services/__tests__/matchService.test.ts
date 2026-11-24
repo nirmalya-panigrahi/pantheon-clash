@@ -206,9 +206,12 @@ describe('matchService 2-4 player rooms and session cleanup', () => {
       'fillWithBots',
       'activePlayers',
       'matchSeed',
+      'matchPreset',
+      'gameMode',
       'round',
       'maxRounds',
       'teamMode',
+      'roundPhase',
       'activeTurnIndex',
       'activeRealm',
       'players',
@@ -222,6 +225,7 @@ describe('matchService 2-4 player rooms and session cleanup', () => {
     ];
     const allowedKeys = new Set([
       ...requiredKeys,
+      'pendingClash',
       'prophecyTarget',
       'bestWin',
       'lastOutcome',
@@ -235,6 +239,7 @@ describe('matchService 2-4 player rooms and session cleanup', () => {
         maxPlayers,
         teamMode: maxPlayers === 4 ? 'teams' : 'ffa',
         fillWithBots: true,
+        matchPreset: 'blitz',
       });
 
       const payloadKeys = Object.keys(payload);
@@ -250,11 +255,16 @@ describe('matchService 2-4 player rooms and session cleanup', () => {
       expect(payload.hostUid).toBe('Zze89CHTwkalGxP71jbSuU9AL8E3');
       expect([2, 3, 4]).toContain(payload.maxPlayers);
       expect(payload.maxPlayers).toBe(maxPlayers);
+      expect(payload.matchPreset).toBe('blitz');
+      expect(payload.gameMode).toBe('points');
+      expect(payload.roundPhase).toBe('attack');
       expect(payload.activePlayers).toEqual(['Zze89CHTwkalGxP71jbSuU9AL8E3']);
       expect(payload.round).toBe(1);
+      expect(payload.maxRounds).toBe(12);
       expect(payload.winner).toBe('NONE');
       expect(payload.players).toHaveLength(maxPlayers);
       expect(payload.players[0].uid).toBe('Zze89CHTwkalGxP71jbSuU9AL8E3');
+      expect(payload.players[0].score).toBe(0);
       for (let i = 1; i < maxPlayers; i += 1) {
         expect(payload.players[i].uid).toBeNull();
       }

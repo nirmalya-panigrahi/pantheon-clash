@@ -23,7 +23,8 @@ import { getCardById } from '../data/cards';
 import {
   getProphecyStat,
   getProphecyStatForTarget,
-  MAX_ROUNDS,
+  HAND_SIZE,
+  MATCH_PRESETS,
   ROUNDS_PER_REALM,
   STAT_KEYS,
 } from '../engine/gameEngine';
@@ -31,6 +32,7 @@ import type { SoundCue } from '../hooks/useSound';
 import { PASSIVE_META, REALM_THEMES, STAT_META } from '../theme/pantheons';
 import type {
   MatchAction,
+  MatchPreset,
   MatchState,
   PlayerState,
   RoundOutcome,
@@ -62,7 +64,11 @@ interface ArenaProps {
   onDispatch: (action: MatchAction) => void;
   onLeave: () => void;
   onToggleReady?: () => void;
-  onUpdateRoomOptions?: (updates: { fillWithBots?: boolean; teamMode?: TeamMode }) => void;
+  onUpdateRoomOptions?: (updates: {
+    fillWithBots?: boolean;
+    teamMode?: TeamMode;
+    matchPreset?: MatchPreset;
+  }) => void;
   onKickSeat?: (seatIndex: number) => void;
   onStartRoom?: () => void;
   onRejoin?: () => void;
@@ -87,9 +93,10 @@ function formatOutcomeTicker(outcome: RoundOutcome, players: readonly PlayerStat
     )[0];
   const scoreText =
     winEntry && runnerUp ? ` (${winEntry.effectiveValue} vs ${runnerUp.effectiveValue})` : '';
-  const potText = outcome.potWon > 0 ? ` +${outcome.potWon} pot` : '';
+  const ptsText = outcome.pointsAwarded > 0 ? ` · +${outcome.pointsAwarded} pts` : '';
+  const potText = outcome.potWon > 0 ? ` (+${outcome.potWon} pot)` : '';
   const resText = outcome.resurrectedPlayers.length > 0 ? ' · Resurrection!' : '';
-  return `${winCard?.name ?? winPlayer?.name ?? outcome.winnerId} wins R${outcome.round} (${statLabel})${scoreText}${potText}${resText}`;
+  return `${winCard?.name ?? winPlayer?.name ?? outcome.winnerId} wins R${outcome.round} (${statLabel})${scoreText}${ptsText}${potText}${resText}`;
 }
 
 export function Arena({
@@ -264,6 +271,9 @@ export function Arena({
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge tone="gold">Waiting Room</Badge>
                 <Badge tone="neutral">{state.players.length} Seats</Badge>
+                <Badge tone="neutral">
+                  {MATCH_PRESETS[state.matchPreset ?? 'blitz'].shortLabel}
+                </Badge>
                 {state.teamMode === 'teams' && <Badge tone="sky">2v2 Teams</Badge>}
               </div>
               <h2 className="font-display text-2xl sm:text-3xl font-bold text-white">
@@ -421,6 +431,23 @@ export function Arena({
                       Mode: {state.teamMode === 'teams' ? '2v2 Teams' : 'Free-for-All'}
                     </Button>
                   )}
+
+                  <div className="inline-flex items-center gap-1 rounded-xl bg-white/10 border border-white/15 p-1">
+                    {(['blitz', 'standard', 'classic'] as const).map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => onUpdateRoomOptions({ matchPreset: preset })}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${
+                          (state.matchPreset ?? 'blitz') === preset
+                            ? 'bg-amber-400 text-slate-950'
+                            : 'text-white/80 hover:text-white'
+                        }`}
+                      >
+                        {MATCH_PRESETS[preset].shortLabel}
+                      </button>
+                    ))}
+                  </div>
                 </>
               )}
             </div>
@@ -467,29 +494,38 @@ export function Arena({
     state.activeTurnIndex === localPlayer.seatIndex &&
     !localPlayer.eliminated &&
     localPlayer.deck.length > 0;
-  const canArmGambit = isLocalTurn && !localPlayer.gambitUsed && !submitting;
+  const isAttackPhase = state.roundPhase === 'attack';
+  const isDefendPhase = state.roundPhase === 'defend' && state.pendingClash !== null;
+  const isLocalAttackTurn = isLocalTurn && isAttackPhase;
+  const isLocalDefendTurn = isLocalTurn && isDefendPhase;
+  const isWarRealm = state.activeRealm === 'WAR';
+  const canArmGambit = isLocalAttackTurn && !localPlayer.gambitUsed && !isWarRealm && !submitting;
 
   const roundsIntoRealm = ((state.round - 1) % ROUNDS_PER_REALM) + 1;
   const roundsUntilRealmChange = ROUNDS_PER_REALM - roundsIntoRealm + 1;
   const realmTheme = REALM_THEMES[state.activeRealm];
 
-  const localTopCard = localPlayer.deck.length > 0 ? getCardById(localPlayer.deck[0]) : null;
-  const localBonusDisplay =
-    localTopCard && localTopCard.domain === state.activeRealm ? 15 : 0;
-
-  const localHasProphecy = Boolean(localTopCard && localTopCard.passive === 'PROPHECY');
+  const localHandIds = localPlayer.deck.slice(0, HAND_SIZE);
+  const localHandCards = localHandIds.map((id) => getCardById(id));
+  const localHasProphecy = localHandCards.some((card) => card.passive === 'PROPHECY');
   const needsProphecyTargetPick =
-    isLocalTurn &&
+    isLocalAttackTurn &&
     localHasProphecy &&
     activeOpponents.length > 1 &&
     (!state.prophecyTarget || state.prophecyTarget.bySeat !== localPlayer.seatIndex);
 
   const singleOrChosenProphecy = getProphecyStat(state, localPlayer.seatIndex);
 
-  const handleStatSelect = (stat: StatKey) => {
-    if (!isLocalTurn || submitting) return;
+  const handleStatSelect = (stat: StatKey, handIndex = 0) => {
+    if (!isLocalAttackTurn || submitting) return;
     onPlaySound('pick');
-    onDispatch({ type: 'PICK_STAT', playerIndex: localPlayer.seatIndex, stat });
+    onDispatch({ type: 'PICK_STAT', playerIndex: localPlayer.seatIndex, stat, handIndex });
+  };
+
+  const handleDefendCardSelect = (handIndex: number) => {
+    if (!isLocalDefendTurn || submitting) return;
+    onPlaySound('pick');
+    onDispatch({ type: 'DEFEND_CARD', playerIndex: localPlayer.seatIndex, handIndex });
   };
 
   const handleToggleGambit = () => {
@@ -499,7 +535,7 @@ export function Arena({
   };
 
   const handleSelectProphecyTarget = (targetIndex: number) => {
-    if (!isLocalTurn || submitting) return;
+    if (!isLocalAttackTurn || submitting) return;
     onPlaySound('pick');
     onDispatch({
       type: 'SELECT_PROPHECY_TARGET',
@@ -534,7 +570,11 @@ export function Arena({
     <main className="max-w-7xl mx-auto px-3 sm:px-6 py-5 sm:py-7 space-y-5">
       {/* Persistent Top HUD */}
       <section className="glass-panel rounded-2xl px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs sm:text-sm">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs sm:text-sm">
+          <Badge tone="neutral">
+            {MATCH_PRESETS[state.matchPreset ?? 'blitz'].shortLabel}
+          </Badge>
+
           <div className="flex items-center gap-1.5">
             <span className="text-white/75">Round</span>
             <span className="font-mono tabular-nums font-bold text-white">
@@ -543,13 +583,14 @@ export function Arena({
           </div>
 
           <div
-            className={`inline-flex items-center gap-2 rounded-xl border backdrop-blur-md px-3 py-1 ${realmTheme.bannerClass}`}
+            className={`inline-flex flex-wrap items-center gap-2 rounded-xl border backdrop-blur-md px-3 py-1 ${realmTheme.bannerClass}`}
           >
             <RealmIcon realm={state.activeRealm} className={`w-4 h-4 ${realmTheme.textClass}`} />
             <span className={`font-semibold ${realmTheme.textClass}`}>
-              {realmTheme.label} (+15)
+              {realmTheme.label}
             </span>
-            <span className="text-[11px] font-mono tabular-nums text-white/85">
+            <span className="text-[11px] text-white/90">{realmTheme.ruleSummary}</span>
+            <span className="text-[11px] font-mono tabular-nums text-white/75">
               · Changes in {roundsUntilRealmChange} {roundsUntilRealmChange === 1 ? 'round' : 'rounds'}
             </span>
           </div>
@@ -557,6 +598,7 @@ export function Arena({
           {state.warPot.length > 0 && (
             <Badge tone="gold" className="font-mono tabular-nums">
               War Pot: {state.warPot.length}
+              {state.activeRealm === 'SEA' ? ' (2× Sea!)' : ''}
             </Badge>
           )}
 
@@ -589,7 +631,7 @@ export function Arena({
         </div>
       </section>
 
-      {/* Deck Standings Strip */}
+      {/* Deck & Trophy Standings Strip */}
       <section className="flex flex-wrap items-center gap-2">
         {state.players.map((p) => {
           const isTurn = state.winner === 'NONE' && p.seatIndex === state.activeTurnIndex;
@@ -614,7 +656,18 @@ export function Arena({
                   {p.team === 0 ? 'A' : 'B'}
                 </Badge>
               )}
-              <span className="font-mono tabular-nums font-bold">{p.deck.length}</span>
+              {state.gameMode === 'points' ? (
+                <>
+                  <span className="font-mono tabular-nums font-bold text-amber-200">
+                    {p.score} pts
+                  </span>
+                  <span className="font-mono tabular-nums text-[11px] text-white/70">
+                    ({p.deck.length} left)
+                  </span>
+                </>
+              ) : (
+                <span className="font-mono tabular-nums font-bold">{p.deck.length}</span>
+              )}
               {p.eliminated && <span className="text-rose-300 font-medium">Out</span>}
               {p.away && !p.eliminated && <Badge tone="gold">Away</Badge>}
             </div>
@@ -660,7 +713,7 @@ export function Arena({
               {winnerBannerText}
             </h2>
             <p className="text-xs sm:text-sm text-white/80 font-mono tabular-nums">
-              Rounds: {state.lastOutcome?.round ?? state.round - 1}/{MAX_ROUNDS}
+              Rounds: {state.lastOutcome?.round ?? state.round - 1}/{state.maxRounds}
             </p>
           </div>
 
@@ -671,7 +724,11 @@ export function Arena({
               </h3>
               <ul className="space-y-1.5 text-xs">
                 {[...state.players]
-                  .sort((a, b) => b.deck.length - a.deck.length)
+                  .sort((a, b) =>
+                    state.gameMode === 'points'
+                      ? b.score - a.score || b.deck.length - a.deck.length
+                      : b.deck.length - a.deck.length,
+                  )
                   .map((p) => (
                     <li key={p.id} className="flex items-center justify-between text-white">
                       <span className="truncate font-medium">
@@ -679,7 +736,9 @@ export function Arena({
                         {state.teamMode === 'teams' ? ` (Team ${p.team === 0 ? 'A' : 'B'})` : ''}
                       </span>
                       <span className="font-mono tabular-nums font-bold text-amber-200">
-                        {p.deck.length} cards · {p.roundsWon}W
+                        {state.gameMode === 'points'
+                          ? `${p.score} pts · ${p.roundsWon}W`
+                          : `${p.deck.length} cards · ${p.roundsWon}W`}
                       </span>
                     </li>
                   ))}
@@ -779,9 +838,12 @@ export function Arena({
               <div key={opp.id} className="space-y-2 min-w-0">
                 <div className="flex items-center justify-between gap-2 text-xs text-white/85 px-1">
                   <span className="font-semibold truncate">
-                    {opp.name} ({opp.deck.length})
+                    {opp.name} ({opp.deck.length} left · {Math.min(HAND_SIZE, opp.deck.length)} in hand)
                   </span>
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {isDefendPhase && state.pendingClash?.selections[opp.id] && (
+                      <Badge tone="gold">Locked</Badge>
+                    )}
                     {opp.gambitUsed && <Badge tone="neutral">Gambit Used</Badge>}
                     {opp.resurrectionUsed && <Badge tone="neutral">Res Used</Badge>}
                   </div>
@@ -812,49 +874,91 @@ export function Arena({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="space-y-0.5">
             <p className="text-xs uppercase tracking-wider text-white/70 font-semibold">
-              Battlefield
+              Battlefield {isDefendPhase ? '· Defense Counter' : '· Attack'}
             </p>
             <p className="font-display text-lg sm:text-xl font-bold text-amber-200">
               {state.winner !== 'NONE'
                 ? 'Match Complete'
-                : isLocalTurn
-                  ? 'Your Turn — Pick a Stat'
-                  : `${activeTurnPlayer.name} is Choosing...`}
+                : isLocalAttackTurn
+                  ? 'Your Turn — Pick a Stat on Any Deity Below'
+                  : isLocalDefendTurn && state.pendingClash
+                    ? `Defend ${STAT_META[state.pendingClash.stat].label}${
+                        state.pendingClash.gambitActive ? ' (Low Wins!)' : ''
+                      } — Pick 1 Card Below`
+                    : `${activeTurnPlayer.name} is Choosing...`}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={localPlayer.resurrectionUsed ? 'neutral' : 'emerald'}>
+            <Badge tone={localPlayer.resurrectionUsed && state.activeRealm !== 'NETHER' ? 'neutral' : 'emerald'}>
               <Flame className="w-3.5 h-3.5" aria-hidden="true" />
-              Resurrection: {localPlayer.resurrectionUsed ? 'Used' : 'Ready'}
+              Resurrection:{' '}
+              {state.activeRealm === 'NETHER'
+                ? 'Free (Nether)'
+                : localPlayer.resurrectionUsed
+                  ? 'Used'
+                  : 'Ready'}
             </Badge>
 
             {state.winner === 'NONE' && (
               <Tooltip
                 content={
-                  localPlayer.gambitUsed
-                    ? 'Gambit already used.'
-                    : 'Lowest effective stat wins this round.'
+                  isWarRealm
+                    ? 'Gambit is locked in the War Realm.'
+                    : localPlayer.gambitUsed
+                      ? 'Gambit already used.'
+                      : 'Lowest effective stat wins this round.'
                 }
               >
                 <Button
-                  variant={state.gambitArmed && isLocalTurn ? 'primary' : 'secondary'}
+                  variant={state.gambitArmed && isLocalAttackTurn ? 'primary' : 'secondary'}
                   size="sm"
                   disabled={!canArmGambit}
                   aria-pressed={state.gambitArmed}
                   onClick={handleToggleGambit}
                 >
                   <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
-                  {localPlayer.gambitUsed
-                    ? 'Gambit Used'
-                    : state.gambitArmed
-                      ? 'Gambit Armed (Low Wins)'
-                      : 'Use Gambit'}
+                  {isWarRealm
+                    ? 'Gambit Locked (War)'
+                    : localPlayer.gambitUsed
+                      ? 'Gambit Used'
+                      : state.gambitArmed
+                        ? 'Gambit Armed (Low Wins)'
+                        : 'Use Gambit'}
                 </Button>
               </Tooltip>
             )}
           </div>
         </div>
+
+        {/* Pending Clash Lock-In Banner during Defense */}
+        {isDefendPhase && state.pendingClash && (
+          <div className="glass-panel-md rounded-2xl border-amber-300/45 bg-amber-400/10 p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge tone="gold">
+                Stat: {STAT_META[state.pendingClash.stat].label}
+              </Badge>
+              {state.pendingClash.gambitActive && (
+                <Badge tone="war">Gambit Active · Low Wins</Badge>
+              )}
+              <span className="text-white/85">
+                {state.players[state.pendingClash.leaderSeat]?.name} challenged!
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {state.players
+                .filter((p) => !p.eliminated && p.deck.length > 0)
+                .map((p) => {
+                  const locked = Boolean(state.pendingClash?.selections[p.id]);
+                  return (
+                    <Badge key={p.id} tone={locked ? 'emerald' : 'neutral'}>
+                      {p.name}: {locked ? 'Locked' : 'Choosing'}
+                    </Badge>
+                  );
+                })}
+            </div>
+          </div>
+        )}
 
         {/* Multi-Opponent Prophecy Target Picker */}
         {needsProphecyTargetPick && (
@@ -950,6 +1054,9 @@ export function Arena({
                 Round {lastOutcome.round} · {STAT_META[lastOutcome.stat].label}
               </span>
               <div className="flex flex-wrap items-center gap-1.5">
+                {lastOutcome.pointsAwarded > 0 && (
+                  <Badge tone="emerald">+{lastOutcome.pointsAwarded} pts</Badge>
+                )}
                 {lastOutcome.gambitActive && <Badge tone="gold">Gambit</Badge>}
                 {lastOutcome.resurrectedPlayers.length > 0 && (
                   <Badge tone="sky">
@@ -1008,38 +1115,67 @@ export function Arena({
         )}
       </section>
 
-      {/* Local Player Top Card */}
-      <section aria-label="Your top card" className="space-y-3">
-        <div className="max-w-sm mx-auto space-y-2">
+      {/* Local Player 3-Card Hand */}
+      <section aria-label="Your hand" className="space-y-3">
+        <div className="max-w-5xl mx-auto space-y-3">
           <div className="flex items-center justify-between text-xs text-white/85 px-1">
-            <span className="font-semibold">{localPlayer.name}</span>
-            <span className="font-mono tabular-nums text-white/75">
-              {localPlayer.deck.length} cards
+            <span className="font-semibold">
+              {localPlayer.name} — Hand ({localHandCards.length} shown · {localPlayer.deck.length} total)
             </span>
+            {state.gameMode === 'points' && (
+              <span className="font-mono tabular-nums text-amber-200 font-bold">
+                Score: {localPlayer.score} pts
+              </span>
+            )}
           </div>
 
-          {localTopCard ? (
-            <Card
-              card={localTopCard}
-              ownerLabel={localPlayer.name}
-              activeRealm={state.activeRealm}
-              realmBonus={localBonusDisplay}
-              interactive={isLocalTurn}
-              disabled={submitting}
-              gambitArmed={state.gambitArmed && isLocalTurn}
-              onSelectStat={handleStatSelect}
-            />
+          {localHandCards.length > 0 ? (
+            <div
+              className={`grid gap-4 mx-auto ${
+                localHandCards.length === 1
+                  ? 'grid-cols-1 max-w-sm'
+                  : localHandCards.length === 2
+                    ? 'grid-cols-1 sm:grid-cols-2 max-w-2xl'
+                    : 'grid-cols-1 md:grid-cols-3 max-w-5xl'
+              }`}
+            >
+              {localHandCards.map((handCard, handIdx) => {
+                const challengedStat = isDefendPhase ? state.pendingClash?.stat ?? null : null;
+                return (
+                  <div key={`${handCard.id}-${handIdx}`} className="space-y-1.5">
+                    <Card
+                      card={handCard}
+                      ownerLabel={localPlayer.name}
+                      activeRealm={state.activeRealm}
+                      interactive={isLocalAttackTurn}
+                      disabled={submitting}
+                      gambitArmed={state.gambitArmed && isLocalAttackTurn}
+                      highlightedStat={challengedStat}
+                      actionLabel={
+                        isLocalDefendTurn ? `Defend with ${handCard.name}` : undefined
+                      }
+                      onSelectStat={(stat) => handleStatSelect(stat, handIdx)}
+                      onClickCard={
+                        isLocalDefendTurn ? () => handleDefendCardSelect(handIdx) : undefined
+                      }
+                    />
+                    {handCard.passive !== 'NONE' && (
+                      <p className="text-[11px] text-center text-white/75 inline-flex items-center justify-center gap-1.5 w-full">
+                        <PassiveIcon
+                          passive={handCard.passive}
+                          className="w-3.5 h-3.5 text-amber-200 shrink-0"
+                        />
+                        <span>{PASSIVE_META[handCard.passive].shortSummary}</span>
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           ) : (
-            <div className="glass-panel-md rounded-2xl p-8 text-center text-sm text-white/75 min-h-[260px] flex items-center justify-center">
+            <div className="glass-panel-md rounded-2xl p-8 text-center text-sm text-white/75 min-h-[220px] flex items-center justify-center max-w-md mx-auto">
               {localPlayer.eliminated ? 'Eliminated — spectating match.' : 'No cards left.'}
             </div>
-          )}
-
-          {localTopCard && localTopCard.passive !== 'NONE' && (
-            <p className="text-[11px] text-center text-white/75 inline-flex items-center justify-center gap-1.5 w-full">
-              <PassiveIcon passive={localTopCard.passive} className="w-3.5 h-3.5 text-amber-200" />
-              <span>{PASSIVE_META[localTopCard.passive].shortSummary}</span>
-            </p>
           )}
         </div>
       </section>

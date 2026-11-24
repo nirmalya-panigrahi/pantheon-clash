@@ -1,5 +1,5 @@
 import { DEITY_NUMBER_BY_ID } from '../data/deityImages';
-import { REALM_BONUS, STAT_KEYS } from '../engine/gameEngine';
+import { getStatBonusForRealm, REALM_BONUS, STAT_KEYS } from '../engine/gameEngine';
 import { PANTHEON_THEMES, PASSIVE_META, STAT_META } from '../theme/pantheons';
 import type { MythCard, ProphecyHint, Realm, StatKey } from '../types/game';
 import { DeityArt, getRealmLabel, RealmIcon, StatIcon } from './MythEmblem';
@@ -21,6 +21,8 @@ export interface CardProps {
   prophecyHint?: ProphecyHint | null;
   compact?: boolean;
   countUpProgress?: number;
+  selected?: boolean;
+  actionLabel?: string;
   onSelectStat?: (stat: StatKey) => void;
   onClickCard?: () => void;
 }
@@ -41,6 +43,8 @@ export function Card({
   prophecyHint = null,
   compact = false,
   countUpProgress = 1,
+  selected = false,
+  actionLabel,
   onSelectStat,
   onClickCard,
 }: CardProps) {
@@ -109,12 +113,17 @@ export function Card({
   const realmMatches = activeRealm === card.domain;
   const activeStatHighlight = selectedStat ?? highlightedStat;
 
+  const baseRealmBonus = activeRealm ? getStatBonusForRealm(card, activeRealm, 'cunning', bonusNegated) : 0;
+  const displayBonus = realmBonus > 0 ? realmBonus : baseRealmBonus;
+
   const outcomeOuterClass =
     outcomeState === 'winner'
       ? 'ring-2 ring-[#f5d77a] shadow-[0_0_32px_rgba(245,215,122,0.5)]'
       : outcomeState === 'loser'
         ? 'grayscale opacity-65 shadow-lg'
-        : 'shadow-[0_14px_34px_rgba(0,0,0,0.65)]';
+        : selected
+          ? 'ring-2 ring-[#f5d77a] -translate-y-1 shadow-[0_0_26px_rgba(245,215,122,0.4)]'
+          : 'shadow-[0_14px_34px_rgba(0,0,0,0.65)]';
 
   const hoverClasses =
     interactive || onClickCard
@@ -123,8 +132,8 @@ export function Card({
 
   const bonusBoxValue = bonusNegated
     ? 'Pierced'
-    : realmBonus > 0
-      ? `+${realmBonus}`
+    : displayBonus > 0
+      ? `+${displayBonus}`
       : realmMatches
         ? `+${REALM_BONUS}`
         : '—';
@@ -211,7 +220,10 @@ export function Card({
         >
           {STAT_KEYS.map((stat) => {
             const base = card.stats[stat];
-            const targetEffective = base + realmBonus;
+            const statBonus = activeRealm
+              ? getStatBonusForRealm(card, activeRealm, stat, bonusNegated)
+              : realmBonus;
+            const targetEffective = base + statBonus;
             const displayEffective =
               countUpProgress < 1
                 ? Math.round(base + (targetEffective - base) * countUpProgress)
@@ -219,7 +231,7 @@ export function Card({
             const isSelected = activeStatHighlight === stat;
 
             const rowHighlight = isSelected
-              ? 'bg-[#f0d27a]/15 shadow-[inset_0_0_12px_rgba(240,210,122,0.2)]'
+              ? 'bg-[#f0d27a]/20 shadow-[inset_0_0_12px_rgba(240,210,122,0.28)]'
               : gambitArmed && interactive
                 ? 'bg-[#f0d27a]/10 hover:bg-[#f0d27a]/20'
                 : interactive
@@ -252,9 +264,9 @@ export function Card({
                       <span className="text-[11px] font-normal text-[#b8892b] line-through opacity-45">
                         +{REALM_BONUS}
                       </span>
-                    ) : realmBonus > 0 ? (
+                    ) : statBonus > 0 ? (
                       <span className="text-[11px] font-semibold text-[#f5d77a]">
-                        +{realmBonus}
+                        +{statBonus}
                       </span>
                     ) : null}
                     <span>{displayEffective}</span>
@@ -283,9 +295,9 @@ export function Card({
                     <span className="text-[10px] font-normal text-[#b8892b] line-through opacity-45">
                       +{REALM_BONUS}
                     </span>
-                  ) : realmBonus > 0 ? (
+                  ) : statBonus > 0 ? (
                     <span className="text-[10px] font-semibold text-[#f5d77a]">
-                      +{realmBonus}
+                      +{statBonus}
                     </span>
                   ) : null}
                   <span>{displayEffective}</span>
@@ -337,11 +349,17 @@ export function Card({
           </div>
         )}
 
-        {/* Footer (Full Card Only) */}
-        {!compact && (
-          <footer className="text-center font-condensed text-[9px] uppercase tracking-[0.16em] text-[#b8892b] pt-0.5 shrink-0">
-            Pantheon Clash · No. {cardNumber} · {tierStars}
+        {/* Footer / Action Hint */}
+        {actionLabel ? (
+          <footer className="text-center font-condensed text-[10px] font-bold uppercase tracking-[0.18em] text-[#0b0b0c] bg-[#f0d27a] rounded py-1 shrink-0">
+            {actionLabel}
           </footer>
+        ) : (
+          !compact && (
+            <footer className="text-center font-condensed text-[9px] uppercase tracking-[0.16em] text-[#b8892b] pt-0.5 shrink-0">
+              Pantheon Clash · No. {cardNumber} · {tierStars}
+            </footer>
+          )
         )}
       </div>
     </article>

@@ -46,11 +46,57 @@ describe('Arena component', () => {
     await user.click(screen.getByRole('button', { name: /use gambit/i }));
     expect(onDispatch).toHaveBeenCalledWith({ type: 'TOGGLE_GAMBIT', playerIndex: 0 });
 
-    await user.click(screen.getByRole('button', { name: /cunning/i }));
+    const cunningButtons = screen.getAllByRole('button', { name: /cunning/i });
+    await user.click(cunningButtons[1]);
     expect(onDispatch).toHaveBeenCalledWith({
       type: 'PICK_STAT',
       playerIndex: 0,
       stat: 'cunning',
+      handIndex: 1,
+    });
+  });
+
+  it('Blue Pill: lets defender pick any card in hand during defend phase and locks Gambit in War realm', async () => {
+    const user = userEvent.setup();
+    const onDispatch = vi.fn();
+    const base = createInitialMatchState(202601, { playerCount: 2 });
+    const defendState = makeArenaState({
+      activeTurnIndex: 0,
+      roundPhase: 'defend',
+      activeRealm: 'WAR',
+      pendingClash: {
+        leaderSeat: 1,
+        stat: 'might',
+        gambitActive: false,
+        selections: { p2: 'thor' },
+      },
+      players: [
+        { ...base.players[0], deck: ['athena', 'zeus', 'ares'] },
+        { ...base.players[1], deck: ['thor', 'odin'] },
+      ],
+    });
+
+    render(
+      <Arena
+        mode="solo"
+        state={defendState}
+        localSeatIndex={0}
+        history={[]}
+        muted={true}
+        reducedMotion={true}
+        onToggleMuted={vi.fn()}
+        onPlaySound={vi.fn()}
+        onDispatch={onDispatch}
+        onLeave={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /gambit locked \(war\)/i })).toBeDisabled();
+    await user.click(screen.getByText(/defend with ares/i));
+    expect(onDispatch).toHaveBeenCalledWith({
+      type: 'DEFEND_CARD',
+      playerIndex: 0,
+      handIndex: 2,
     });
   });
 
@@ -154,6 +200,7 @@ describe('Arena component', () => {
     const base = createInitialMatchState(202601, { playerCount: 2 });
     const oppTurnState = makeArenaState({
       activeTurnIndex: 1,
+      activeRealm: 'SKY',
       players: [
         { ...base.players[0], gambitUsed: true },
         { ...base.players[1], name: 'Valkyrie Bot' },

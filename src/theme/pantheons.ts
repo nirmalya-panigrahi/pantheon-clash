@@ -95,6 +95,7 @@ export const PANTHEON_THEMES: Record<Pantheon, PantheonTheme> = {
 export interface RealmTheme {
   label: string;
   description: string;
+  ruleSummary: string;
   badgeTone: 'sky' | 'nether' | 'sea' | 'war';
   bannerClass: string;
   textClass: string;
@@ -103,28 +104,32 @@ export interface RealmTheme {
 export const REALM_THEMES: Record<Realm, RealmTheme> = {
   SKY: {
     label: 'Sky',
-    description: '+15 to all stats for Sky deities',
+    description: '+15 stats (+20 Arcana & Influence) for Sky deities',
+    ruleSummary: '+15 (+20 Arc/Inf)',
     badgeTone: 'sky',
     bannerClass: 'border-amber-400/40 bg-amber-500/12',
     textClass: 'text-amber-300',
   },
   NETHER: {
     label: 'Nether',
-    description: '+15 to all stats for Nether deities',
+    description: '+15 stats for Nether deities · Resurrection doesn’t spend its charge',
+    ruleSummary: '+15 · Free Res',
     badgeTone: 'nether',
     bannerClass: 'border-violet-400/40 bg-violet-500/12',
     textClass: 'text-violet-300',
   },
   SEA: {
     label: 'Sea',
-    description: '+15 to all stats for Sea deities',
+    description: '+15 stats for Sea deities · War Pot pays double trophies',
+    ruleSummary: '+15 · 2× Pot',
     badgeTone: 'sea',
     bannerClass: 'border-sky-400/40 bg-sky-500/12',
     textClass: 'text-sky-300',
   },
   WAR: {
     label: 'War',
-    description: '+15 to all stats for War deities',
+    description: '+20 stats (+25 Might) for War deities · Gambit disabled',
+    ruleSummary: '+20 (+25 Mgt) · No Gambit',
     badgeTone: 'war',
     bannerClass: 'border-rose-400/40 bg-rose-500/12',
     textClass: 'text-rose-300',

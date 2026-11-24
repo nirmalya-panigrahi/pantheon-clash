@@ -81,6 +81,7 @@ describe('Lobby component', () => {
 
     expect(onStartSolo).toHaveBeenCalledWith({
       seed: 4242,
+      matchPreset: 'blitz',
     });
 
     await user.click(screen.getByRole('button', { name: /sign in with google/i }));
@@ -152,6 +153,7 @@ describe('Lobby component', () => {
       maxPlayers: 4,
       teamMode: 'teams',
       fillWithBots: true,
+      matchPreset: 'blitz',
     });
 
     // Switch to Join Room & enter 6-char segmented room code

@@ -15,7 +15,7 @@ import {
   toggleSeatReady,
   updateWaitingRoomOptions,
 } from '../services/matchService';
-import type { FirestoreMatchDocument, MatchAction, TeamMode } from '../types/game';
+import type { FirestoreMatchDocument, MatchAction, MatchPreset, TeamMode } from '../types/game';
 
 export function useMultiplayerMatch(matchId: string | null, uid: string | null) {
   const [match, setMatch] = useState<FirestoreMatchDocument | null>(null);
@@ -96,7 +96,8 @@ export function useMultiplayerMatch(matchId: string | null, uid: string | null) 
     const activePlayer = match.players[match.activeTurnIndex];
     if (!activePlayer) return;
 
-    const roundKey = `${match.round}-${match.activeTurnIndex}-${match.prophecyTarget ? 'p' : 'n'}`;
+    const selectionCount = Object.keys(match.pendingClash?.selections ?? {}).length;
+    const roundKey = `${match.round}-${match.roundPhase}-${match.activeTurnIndex}-${selectionCount}-${match.prophecyTarget ? 'p' : 'n'}`;
 
     const runAutoTurn = async () => {
       if (autoAdvanceRoundRef.current === roundKey) return;
@@ -190,7 +191,7 @@ export function useMultiplayerMatch(matchId: string | null, uid: string | null) 
   }, [matchId, uid]);
 
   const updateRoomOptions = useCallback(
-    async (updates: { fillWithBots?: boolean; teamMode?: TeamMode }) => {
+    async (updates: { fillWithBots?: boolean; teamMode?: TeamMode; matchPreset?: MatchPreset }) => {
       if (!matchId || !uid) return;
       setError(null);
       try {

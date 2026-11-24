@@ -16,11 +16,13 @@ import {
 import {
   createInitialMatchState,
   getDefaultBotName,
+  MATCH_PRESETS,
 } from '../engine/gameEngine';
 import { mulberry32, normalizeSeed } from '../engine/prng';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import type {
   FirestoreMatchDocument,
+  MatchPreset,
   MatchState,
   PlayerCount,
   TeamMode,
@@ -64,6 +66,7 @@ export interface CreateRoomParams {
   maxPlayers?: PlayerCount;
   teamMode?: TeamMode;
   fillWithBots?: boolean;
+  matchPreset?: MatchPreset;
 }
 
 export interface CreateRoomResultPayload {
@@ -82,6 +85,7 @@ export function buildCreateMatchPayload({
   maxPlayers = 2,
   teamMode = 'ffa',
   fillWithBots = false,
+  matchPreset = 'blitz',
 }: CreateRoomParams): CreateRoomResultPayload {
   const seed = normalizeSeed(matchSeed);
   const matchId = generateMatchId(seed);
@@ -106,6 +110,7 @@ export function buildCreateMatchPayload({
   const initialState = createInitialMatchState(seed, {
     playerCount: maxPlayers,
     teamMode,
+    matchPreset,
     players: playerConfigs,
   });
 
@@ -278,7 +283,7 @@ export async function toggleSeatReady(matchId: string, uid: string): Promise<voi
 export async function updateWaitingRoomOptions(
   matchId: string,
   hostUid: string,
-  updates: { fillWithBots?: boolean; teamMode?: TeamMode },
+  updates: { fillWithBots?: boolean; teamMode?: TeamMode; matchPreset?: MatchPreset },
 ): Promise<void> {
   const firestore = requireDb();
   const matchRef = doc(firestore, 'matches', matchId);
@@ -296,10 +301,15 @@ export async function updateWaitingRoomOptions(
         data.maxPlayers === 4 && (updates.teamMode ?? data.teamMode) === 'teams'
           ? 'teams'
           : 'ffa';
+      const nextPreset: MatchPreset = updates.matchPreset ?? data.matchPreset ?? 'blitz';
+      const presetCfg = MATCH_PRESETS[nextPreset];
 
       tx.update(matchRef, {
         fillWithBots: nextFill,
         teamMode: nextTeamMode,
+        matchPreset: nextPreset,
+        gameMode: presetCfg.gameMode,
+        maxRounds: presetCfg.maxRounds,
         updatedAt: serverTimestamp(),
       });
     });
@@ -389,6 +399,7 @@ export async function startWaitingMatch(matchId: string, hostUid: string): Promi
       const freshState = createInitialMatchState(data.matchSeed, {
         playerCount,
         teamMode: playerCount === 4 ? data.teamMode : 'ffa',
+        matchPreset: data.matchPreset ?? 'blitz',
         players: finalConfigs,
       });
 
@@ -474,22 +485,28 @@ export async function commitMatchState(
         return;
       }
 
-      const roundAdvanced = nextState.round !== current.round || isRematchReset;
+      const turnChanged =
+        nextState.round !== current.round ||
+        nextState.activeTurnIndex !== current.activeTurnIndex ||
+        nextState.roundPhase !== current.roundPhase ||
+        isRematchReset;
 
       tx.update(matchRef, {
         status: nextState.winner === 'NONE' ? 'active' : 'finished',
         round: nextState.round,
+        roundPhase: nextState.roundPhase,
         activeTurnIndex: nextState.activeTurnIndex,
         activeRealm: nextState.activeRealm,
         players: nextState.players,
         warPot: nextState.warPot,
+        pendingClash: nextState.pendingClash,
         gambitArmed: nextState.gambitArmed,
         prophecyTarget: nextState.prophecyTarget,
         statWins: nextState.statWins,
         bestWin: nextState.bestWin,
         winner: nextState.winner,
         lastOutcome: nextState.lastOutcome,
-        ...(roundAdvanced ? { turnStartedAt: serverTimestamp() } : {}),
+        ...(turnChanged ? { turnStartedAt: serverTimestamp() } : {}),
         updatedAt: serverTimestamp(),
       });
     });

@@ -68,12 +68,12 @@ service cloud.firestore {
       return seat is map
         && seat.keys().hasAll([
           'id', 'seatIndex', 'name', 'isBot', 'uid', 'team',
-          'deck', 'resurrectionUsed', 'gambitUsed', 'eliminated',
+          'deck', 'score', 'resurrectionUsed', 'gambitUsed', 'eliminated',
           'away', 'ready', 'roundsWon'
         ])
         && seat.keys().hasOnly([
           'id', 'seatIndex', 'name', 'isBot', 'uid', 'team',
-          'deck', 'resurrectionUsed', 'gambitUsed', 'eliminated',
+          'deck', 'score', 'resurrectionUsed', 'gambitUsed', 'eliminated',
           'away', 'ready', 'roundsWon'
         ])
         && isValidSeatId(seat.id)
@@ -83,6 +83,7 @@ service cloud.firestore {
         && (seat.uid == null || isValidUid(seat.uid))
         && seat.team in [0, 1]
         && isValidDeck(seat.deck)
+        && seat.score is int && seat.score >= 0 && seat.score <= 500
         && seat.resurrectionUsed is bool
         && seat.gambitUsed is bool
         && seat.eliminated is bool
@@ -142,11 +143,13 @@ service cloud.firestore {
         outcome is map
         && outcome.keys().hasAll([
           'round', 'leaderId', 'stat', 'entries', 'gambitActive',
-          'resurrectedPlayers', 'winnerId', 'tiedPlayerIds', 'potWon', 'potSizeAfter'
+          'resurrectedPlayers', 'winnerId', 'tiedPlayerIds', 'potWon', 'potSizeAfter',
+          'pointsAwarded'
         ])
         && outcome.keys().hasOnly([
           'round', 'leaderId', 'stat', 'entries', 'gambitActive',
-          'resurrectedPlayers', 'winnerId', 'tiedPlayerIds', 'potWon', 'potSizeAfter'
+          'resurrectedPlayers', 'winnerId', 'tiedPlayerIds', 'potWon', 'potSizeAfter',
+          'pointsAwarded'
         ])
         && outcome.round is int && outcome.round >= 1 && outcome.round <= 200
         && isValidSeatId(outcome.leaderId)
@@ -158,22 +161,49 @@ service cloud.firestore {
         && outcome.tiedPlayerIds is list && outcome.tiedPlayerIds.size() <= 4
         && outcome.potWon is int && outcome.potWon >= 0 && outcome.potWon <= 60
         && outcome.potSizeAfter is int && outcome.potSizeAfter >= 0 && outcome.potSizeAfter <= 60
+        && outcome.pointsAwarded is int && outcome.pointsAwarded >= 0 && outcome.pointsAwarded <= 120
+      );
+    }
+
+    function isValidPreset(preset) {
+      return preset in ['blitz', 'standard', 'classic'];
+    }
+
+    function isValidGameMode(mode) {
+      return mode in ['points', 'classic'];
+    }
+
+    function isValidRoundPhase(phase) {
+      return phase in ['attack', 'defend'];
+    }
+
+    function isValidPendingClash(pc) {
+      return pc == null || (
+        pc is map
+        && pc.keys().hasAll(['leaderSeat', 'stat', 'gambitActive', 'selections'])
+        && pc.keys().hasOnly(['leaderSeat', 'stat', 'gambitActive', 'selections'])
+        && pc.leaderSeat is int && pc.leaderSeat >= 0 && pc.leaderSeat <= 3
+        && isValidStat(pc.stat)
+        && pc.gambitActive is bool
+        && pc.selections is map
+        && pc.selections.keys().hasOnly(['p1', 'p2', 'p3', 'p4'])
+        && pc.selections.size() >= 1 && pc.selections.size() <= 4
       );
     }
 
     function isValidMatch(data) {
       return data.keys().hasAll([
           'matchId', 'roomCode', 'status', 'hostUid', 'maxPlayers', 'fillWithBots',
-          'activePlayers', 'matchSeed', 'round', 'maxRounds', 'teamMode',
-          'activeTurnIndex', 'activeRealm', 'players', 'warPot', 'gambitArmed',
-          'statWins', 'winner', 'turnStartedAt', 'createdAt', 'updatedAt'
+          'activePlayers', 'matchSeed', 'matchPreset', 'gameMode', 'round', 'maxRounds',
+          'teamMode', 'roundPhase', 'activeTurnIndex', 'activeRealm', 'players', 'warPot',
+          'gambitArmed', 'statWins', 'winner', 'turnStartedAt', 'createdAt', 'updatedAt'
         ])
         && data.keys().hasOnly([
           'matchId', 'roomCode', 'status', 'hostUid', 'maxPlayers', 'fillWithBots',
-          'activePlayers', 'matchSeed', 'round', 'maxRounds', 'teamMode',
-          'activeTurnIndex', 'activeRealm', 'players', 'warPot', 'gambitArmed',
-          'prophecyTarget', 'statWins', 'bestWin', 'winner', 'lastOutcome',
-          'turnStartedAt', 'createdAt', 'updatedAt'
+          'activePlayers', 'matchSeed', 'matchPreset', 'gameMode', 'round', 'maxRounds',
+          'teamMode', 'roundPhase', 'activeTurnIndex', 'activeRealm', 'players', 'warPot',
+          'pendingClash', 'gambitArmed', 'prophecyTarget', 'statWins', 'bestWin', 'winner',
+          'lastOutcome', 'turnStartedAt', 'createdAt', 'updatedAt'
         ])
         && isValidId(data.matchId)
         && isValidRoomCode(data.roomCode)
@@ -183,13 +213,17 @@ service cloud.firestore {
         && data.fillWithBots is bool
         && isValidActivePlayers(data.activePlayers)
         && data.matchSeed is int && data.matchSeed >= 0 && data.matchSeed <= 4294967295
+        && isValidPreset(data.matchPreset)
+        && isValidGameMode(data.gameMode)
         && data.round is int && data.round >= 1 && data.round <= 200
         && data.maxRounds is int && data.maxRounds >= 1 && data.maxRounds <= 200
         && data.teamMode in ['ffa', 'teams']
+        && isValidRoundPhase(data.roundPhase)
         && data.activeTurnIndex is int && data.activeTurnIndex >= 0 && data.activeTurnIndex < data.players.size()
         && isValidRealm(data.activeRealm)
         && isValidPlayersList(data.players)
         && isValidDeck(data.warPot)
+        && (!('pendingClash' in data) || isValidPendingClash(data.pendingClash))
         && data.gambitArmed is bool
         && (!('prophecyTarget' in data) || isValidProphecyTarget(data.prophecyTarget))
         && isValidStatWins(data.statWins)
@@ -312,7 +346,8 @@ service cloud.firestore {
         && seatKickedOrUnchanged(2)
         && seatKickedOrUnchanged(3)
         && incoming().diff(existing()).affectedKeys().hasOnly([
-          'fillWithBots', 'teamMode', 'players', 'activePlayers', 'updatedAt'
+          'fillWithBots', 'teamMode', 'matchPreset', 'gameMode', 'maxRounds',
+          'players', 'activePlayers', 'updatedAt'
         ]);
     }
 
@@ -322,10 +357,10 @@ service cloud.firestore {
         && incoming().status == 'active'
         && incoming().turnStartedAt == request.time
         && incoming().diff(existing()).affectedKeys().hasOnly([
-          'status', 'maxPlayers', 'round', 'maxRounds', 'teamMode',
-          'activeTurnIndex', 'activeRealm', 'players', 'warPot',
-          'gambitArmed', 'prophecyTarget', 'statWins', 'bestWin',
-          'winner', 'lastOutcome', 'turnStartedAt', 'updatedAt'
+          'status', 'maxPlayers', 'matchPreset', 'gameMode', 'round', 'maxRounds',
+          'teamMode', 'roundPhase', 'activeTurnIndex', 'activeRealm', 'players',
+          'warPot', 'pendingClash', 'gambitArmed', 'prophecyTarget', 'statWins',
+          'bestWin', 'winner', 'lastOutcome', 'turnStartedAt', 'updatedAt'
         ]);
     }
 
@@ -346,10 +381,17 @@ service cloud.firestore {
         && incoming().maxPlayers == existing().maxPlayers
         && incoming().fillWithBots == existing().fillWithBots
         && incoming().teamMode == existing().teamMode
-        && (incoming().round == existing().round || incoming().turnStartedAt == request.time)
+        && incoming().matchPreset == existing().matchPreset
+        && incoming().gameMode == existing().gameMode
+        && (
+          (incoming().round == existing().round
+            && incoming().activeTurnIndex == existing().activeTurnIndex
+            && incoming().roundPhase == existing().roundPhase)
+          || incoming().turnStartedAt == request.time
+        )
         && incoming().diff(existing()).affectedKeys().hasOnly([
-          'status', 'round', 'activeTurnIndex', 'activeRealm',
-          'players', 'warPot', 'gambitArmed', 'prophecyTarget',
+          'status', 'round', 'roundPhase', 'activeTurnIndex', 'activeRealm',
+          'players', 'warPot', 'pendingClash', 'gambitArmed', 'prophecyTarget',
           'statWins', 'bestWin', 'winner', 'lastOutcome',
           'turnStartedAt', 'updatedAt'
         ]);
@@ -386,13 +428,15 @@ service cloud.firestore {
         && request.auth.uid == existing().hostUid
         && incoming().status == 'active'
         && incoming().round == 1
+        && incoming().roundPhase == 'attack'
+        && (!('pendingClash' in incoming()) || incoming().pendingClash == null)
         && incoming().winner == 'NONE'
         && incoming().players.size() == existing().players.size()
         && incoming().activePlayers == existing().activePlayers
         && incoming().turnStartedAt == request.time
         && incoming().diff(existing()).affectedKeys().hasOnly([
-          'status', 'round', 'activeTurnIndex', 'activeRealm',
-          'players', 'warPot', 'gambitArmed', 'prophecyTarget',
+          'status', 'round', 'roundPhase', 'activeTurnIndex', 'activeRealm',
+          'players', 'warPot', 'pendingClash', 'gambitArmed', 'prophecyTarget',
           'statWins', 'bestWin', 'winner', 'lastOutcome',
           'turnStartedAt', 'updatedAt'
         ]);

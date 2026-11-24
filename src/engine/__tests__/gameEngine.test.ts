@@ -24,6 +24,7 @@ function makePlayer(idx: number, overrides: Partial<PlayerState> = {}): PlayerSt
     uid: null,
     team: idx % 2 === 0 ? 0 : 1,
     deck: ['zeus', 'poseidon'],
+    score: 0,
     resurrectionUsed: false,
     gambitUsed: false,
     eliminated: false,
@@ -37,9 +38,12 @@ function makePlayer(idx: number, overrides: Partial<PlayerState> = {}): PlayerSt
 function buildCustomState(overrides: Partial<MatchState> = {}): MatchState {
   return {
     matchSeed: 12345,
+    matchPreset: 'blitz',
+    gameMode: 'points',
     round: 1,
-    maxRounds: MAX_ROUNDS,
+    maxRounds: 12,
     teamMode: 'ffa',
+    roundPhase: 'attack',
     activeTurnIndex: 0,
     activeRealm: 'SKY',
     players: [
@@ -47,6 +51,7 @@ function buildCustomState(overrides: Partial<MatchState> = {}): MatchState {
       makePlayer(1, { deck: ['thor', 'hades'] }),
     ],
     warPot: [],
+    pendingClash: null,
     gambitArmed: false,
     prophecyTarget: null,
     statWins: { might: 0, arcana: 0, cunning: 0, influence: 0 },
@@ -57,21 +62,54 @@ function buildCustomState(overrides: Partial<MatchState> = {}): MatchState {
   };
 }
 
+function playFullRound(
+  state: MatchState,
+  stat: StatKey,
+  handBySeat: Record<number, number> = {},
+): MatchState {
+  const leader = state.activeTurnIndex;
+  let next = reduceMatchState(state, {
+    type: 'PICK_STAT',
+    playerIndex: leader,
+    stat,
+    handIndex: handBySeat[leader] ?? 0,
+  });
+  let safety = 0;
+  while (next.roundPhase === 'defend' && next.winner === 'NONE' && safety < 4) {
+    const defender = next.activeTurnIndex;
+    next = reduceMatchState(next, {
+      type: 'DEFEND_CARD',
+      playerIndex: defender,
+      handIndex: handBySeat[defender] ?? 0,
+    });
+    safety += 1;
+  }
+  return next;
+}
+
 describe('gameEngine deterministic 2-4 player mechanics', () => {
-  it('Blue Pill: splits 60 unique cards evenly for 2, 3, and 4 players deterministically', () => {
-    const s2a = createInitialMatchState(777, { playerCount: 2 });
-    const s2b = createInitialMatchState(777, { playerCount: 2 });
-    const s3 = createInitialMatchState(777, { playerCount: 3 });
-    const s4 = createInitialMatchState(777, { playerCount: 4 });
+  it('Blue Pill: deals Blitz (12), Standard (15), and Classic full-split decks deterministically', () => {
+    const blitzA = createInitialMatchState(777, { playerCount: 2 });
+    const blitzB = createInitialMatchState(777, { playerCount: 2 });
+    const std4 = createInitialMatchState(777, { playerCount: 4, matchPreset: 'standard' });
+    const classic3 = createInitialMatchState(777, { playerCount: 3, matchPreset: 'classic' });
+    const classic4 = createInitialMatchState(777, { playerCount: 4, matchPreset: 'classic' });
 
     expect(ALL_CARDS).toHaveLength(60);
-    expect(s2a).toEqual(s2b);
-    expect(s2a.players.map((p) => p.deck.length)).toEqual([30, 30]);
-    expect(s3.players.map((p) => p.deck.length)).toEqual([20, 20, 20]);
-    expect(s4.players.map((p) => p.deck.length)).toEqual([15, 15, 15, 15]);
+    expect(blitzA).toEqual(blitzB);
+    expect(blitzA.matchPreset).toBe('blitz');
+    expect(blitzA.gameMode).toBe('points');
+    expect(blitzA.maxRounds).toBe(12);
+    expect(blitzA.players.map((p) => p.deck.length)).toEqual([12, 12]);
 
-    expect(new Set(s3.players.flatMap((p) => p.deck)).size).toBe(60);
-    expect(new Set(s4.players.flatMap((p) => p.deck)).size).toBe(60);
+    expect(std4.maxRounds).toBe(15);
+    expect(std4.players.map((p) => p.deck.length)).toEqual([15, 15, 15, 15]);
+    expect(new Set(std4.players.flatMap((p) => p.deck)).size).toBe(60);
+
+    expect(classic3.gameMode).toBe('classic');
+    expect(classic3.maxRounds).toBe(60);
+    expect(classic3.players.map((p) => p.deck.length)).toEqual([20, 20, 20]);
+    expect(classic4.players.map((p) => p.deck.length)).toEqual([15, 15, 15, 15]);
   });
 
   it('Blue Pill: selects Round 1 leader deterministically via Mulberry32 across seats', () => {
@@ -99,14 +137,35 @@ describe('gameEngine deterministic 2-4 player mechanics', () => {
     expect(new Set([r1, r4, r7, r10]).size).toBe(4);
   });
 
-  it('Blue Pill: PIERCING ignores +15 realm bonus on ALL opponents in multi-player clashes', () => {
+  it('Blue Pill: applies distinct SKY/WAR stat bonuses and PIERCING negation across 2-4 players', () => {
     const apollo = getCardById('apollo'); // SKY, PROPHECY
     const zeus = getCardById('zeus'); // SKY, PIERCING
     const horus = getCardById('horus'); // SKY, NONE
+    const poseidon = getCardById('poseidon'); // SEA, NONE
+    const ares = getCardById('ares'); // WAR, PIERCING
 
     const pierced2p = computeEffectiveStats(apollo, zeus, 'SKY');
     expect(pierced2p.bonus).toBe(0);
     expect(pierced2p.pierced).toBe(true);
+    expect(pierced2p.effectiveStats.arcana).toBe(apollo.stats.arcana);
+
+    // SKY grants +20 Arcana/Influence and +15 Might/Cunning when unpierced
+    const skyUnpierced = computeEffectiveStats(apollo, poseidon, 'SKY');
+    expect(skyUnpierced.statBonuses).toEqual({
+      might: 15,
+      arcana: 20,
+      cunning: 15,
+      influence: 20,
+    });
+
+    // WAR grants +25 Might and +20 other stats when unpierced
+    const warUnpierced = computeEffectiveStats(ares, poseidon, 'WAR');
+    expect(warUnpierced.statBonuses).toEqual({
+      might: 25,
+      arcana: 20,
+      cunning: 20,
+      influence: 20,
+    });
 
     const multi = computeEffectiveStatsForRound(
       [
@@ -120,23 +179,59 @@ describe('gameEngine deterministic 2-4 player mechanics', () => {
     expect(multi[0].pierced).toBe(true);
     expect(multi[2].bonus).toBe(0);
     expect(multi[2].pierced).toBe(true);
-    // Single PIERCING holder keeps own realm bonus
     expect(multi[1].bonus).toBe(REALM_BONUS);
     expect(multi[1].pierced).toBe(false);
   });
 
-  it('Blue Pill: PROPHECY lets active player pick a target opponent in 3-4 player matches', () => {
+  it('Blue Pill: 3-card hand attack + defend selection spends chosen cards and scores Trophy points', () => {
+    const initial = buildCustomState({
+      activeTurnIndex: 0,
+      activeRealm: 'SKY',
+      players: [
+        makePlayer(0, { deck: ['odysseus', 'zeus', 'apollo'] }), // hand index 1 = zeus (SKY, influence 98+20=118)
+        makePlayer(1, { deck: ['thor', 'odin', 'loki'] }), // hand index 2 = loki
+      ],
+    });
+
+    const afterAttack = reduceMatchState(initial, {
+      type: 'PICK_STAT',
+      playerIndex: 0,
+      stat: 'influence',
+      handIndex: 1,
+    });
+
+    expect(afterAttack.roundPhase).toBe('defend');
+    expect(afterAttack.activeTurnIndex).toBe(1);
+    expect(afterAttack.pendingClash?.selections).toEqual({ p1: 'zeus' });
+
+    const resolved = reduceMatchState(afterAttack, {
+      type: 'DEFEND_CARD',
+      playerIndex: 1,
+      handIndex: 2,
+    });
+
+    expect(resolved.roundPhase).toBe('attack');
+    expect(resolved.pendingClash).toBeNull();
+    expect(resolved.round).toBe(2);
+    expect(resolved.lastOutcome?.winnerId).toBe('p1');
+    expect(resolved.lastOutcome?.pointsAwarded).toBe(2);
+    expect(resolved.players[0].score).toBe(2);
+    // Spent cards removed in points mode (not returned to winner deck)
+    expect(resolved.players[0].deck).toEqual(['odysseus', 'apollo']);
+    expect(resolved.players[1].deck).toEqual(['thor', 'odin']);
+  });
+
+  it('Blue Pill: PROPHECY detects hand card and lets active player pick target in 3-4P', () => {
     const state = buildCustomState({
       activeTurnIndex: 0,
       activeRealm: 'SEA',
       players: [
-        makePlayer(0, { deck: ['athena', 'zeus'] }), // PROPHECY
+        makePlayer(0, { deck: ['zeus', 'athena', 'apollo'] }), // athena at hand index 1
         makePlayer(1, { deck: ['poseidon', 'thor'] }),
         makePlayer(2, { deck: ['hades', 'odin'] }),
       ],
     });
 
-    // Multi-opponent requires explicit target choice (returns null until chosen)
     expect(getProphecyStat(state, 0)).toBeNull();
 
     const spied = reduceMatchState(state, {
@@ -148,7 +243,6 @@ describe('gameEngine deterministic 2-4 player mechanics', () => {
     expect(spied.prophecyTarget?.targetSeat).toBe(2);
     expect(getProphecyStat(spied, 0)).toEqual(getProphecyStatForTarget(state, 0, 2));
 
-    // Red Pill: cannot pick a second prophecy target in the same round
     const spiedTwice = reduceMatchState(spied, {
       type: 'SELECT_PROPHECY_TARGET',
       playerIndex: 0,
@@ -157,30 +251,39 @@ describe('gameEngine deterministic 2-4 player mechanics', () => {
     expect(spiedTwice).toBe(spied);
   });
 
-  it('Blue Pill: RESURRECTION returns losing card to bottom of owner deck once per match', () => {
-    const initial = buildCustomState({
+  it('Blue Pill: RESURRECTION is free in NETHER and single-use in other realms', () => {
+    const netherInitial = buildCustomState({
       activeTurnIndex: 0,
       activeRealm: 'NETHER',
       players: [
-        makePlayer(0, { deck: ['hades', 'poseidon'] }), // hades RESURRECTION might 78
+        makePlayer(0, { deck: ['hades', 'poseidon'] }), // hades RESURRECTION might 78+15=93
         makePlayer(1, { deck: ['thor', 'odin'] }), // thor PIERCING might 97
       ],
     });
 
-    const afterFirstLoss = reduceMatchState(initial, {
-      type: 'PICK_STAT',
-      playerIndex: 0,
-      stat: 'might',
-    });
+    const afterNetherLoss = playFullRound(netherInitial, 'might');
+    expect(afterNetherLoss.lastOutcome?.winnerId).toBe('p2');
+    expect(afterNetherLoss.lastOutcome?.resurrectedPlayers).toEqual(['p1']);
+    expect(afterNetherLoss.players[0].resurrectionUsed).toBe(false);
+    expect(afterNetherLoss.players[0].deck).toEqual(['poseidon', 'hades']);
 
-    expect(afterFirstLoss.lastOutcome?.winnerId).toBe('p2');
-    expect(afterFirstLoss.lastOutcome?.resurrectedPlayers).toEqual(['p1']);
-    expect(afterFirstLoss.players[0].resurrectionUsed).toBe(true);
-    expect(afterFirstLoss.players[0].deck).toEqual(['poseidon', 'hades']);
-    expect(afterFirstLoss.players[1].deck).toEqual(['odin', 'thor']);
+    const skyInitial = buildCustomState({
+      activeTurnIndex: 0,
+      activeRealm: 'SKY',
+      players: [
+        makePlayer(0, { deck: ['hades', 'poseidon'] }),
+        makePlayer(1, { deck: ['thor', 'odin'] }),
+      ],
+    });
+    const afterSkyLoss = playFullRound(skyInitial, 'might');
+    expect(afterSkyLoss.lastOutcome?.resurrectedPlayers).toEqual(['p1']);
+    expect(afterSkyLoss.players[0].resurrectionUsed).toBe(true);
   });
 
-  it('Blue Pill: Gambit inverts comparison across all players so lowest effective stat wins', () => {
+  it('Blue Pill: Gambit inverts comparison in SKY/SEA/NETHER and is locked in WAR', () => {
+    const warState = buildCustomState({ activeTurnIndex: 0, activeRealm: 'WAR' });
+    expect(reduceMatchState(warState, { type: 'TOGGLE_GAMBIT', playerIndex: 0 })).toBe(warState);
+
     const initial = buildCustomState({
       activeTurnIndex: 0,
       activeRealm: 'NETHER',
@@ -194,104 +297,75 @@ describe('gameEngine deterministic 2-4 player mechanics', () => {
     const armed = reduceMatchState(initial, { type: 'TOGGLE_GAMBIT', playerIndex: 0 });
     expect(armed.gambitArmed).toBe(true);
 
-    const resolved = reduceMatchState(armed, {
-      type: 'PICK_STAT',
-      playerIndex: 0,
-      stat: 'might',
-    });
-
+    const resolved = playFullRound(armed, 'might');
     expect(resolved.lastOutcome?.gambitActive).toBe(true);
     expect(resolved.lastOutcome?.winnerId).toBe('p1');
     expect(resolved.players[0].gambitUsed).toBe(true);
-    expect(resolved.players[0].deck).toEqual(['zeus', 'odysseus', 'thor', 'ares']);
+    expect(resolved.players[0].score).toBe(3);
   });
 
-  it('Blue Pill: multi-player ties move all cards to warPot and rotate turn clockwise to next active seat', () => {
+  it('Blue Pill: Ties feed warPot and SEA realm doubles War Pot Trophy payouts', () => {
     const initial = buildCustomState({
       activeTurnIndex: 0,
-      activeRealm: 'SKY',
+      activeRealm: 'SEA',
       players: [
-        makePlayer(0, { deck: ['kartikeya', 'thor'] }), // might 93
-        makePlayer(1, { deck: ['karna', 'odysseus'] }), // might 93
-        makePlayer(2, { deck: ['apollo', 'ares'] }), // might 78
+        makePlayer(0, { deck: ['kartikeya', 'poseidon'] }), // kartikeya might 93
+        makePlayer(1, { deck: ['karna', 'odysseus'] }), // karna might 93
       ],
     });
 
-    const afterTie = reduceMatchState(initial, {
-      type: 'PICK_STAT',
-      playerIndex: 0,
-      stat: 'might',
-    });
-
+    const afterTie = playFullRound(initial, 'might');
     expect(afterTie.lastOutcome?.winnerId).toBe('TIE');
-    expect(afterTie.warPot).toEqual(['kartikeya', 'karna', 'apollo']);
-    expect(afterTie.activeTurnIndex).toBe(1); // Rotated clockwise from seat 0 -> seat 1
+    expect(afterTie.warPot).toEqual(['kartikeya', 'karna']);
+    expect(afterTie.activeTurnIndex).toBe(1);
 
-    // Seat 1 loses to seat 0 (thor) and seat 2 (ares); ares might 94 vs thor 97 -> seat 0 wins all + pot!
-    const afterWin = reduceMatchState(afterTie, {
-      type: 'PICK_STAT',
-      playerIndex: 1,
-      stat: 'might',
-    });
-
+    const afterWin = playFullRound({ ...afterTie, activeRealm: 'SEA' }, 'might');
     expect(afterWin.lastOutcome?.winnerId).toBe('p1');
-    expect(afterWin.lastOutcome?.potWon).toBe(3);
-    expect(afterWin.warPot).toEqual([]);
-    expect(afterWin.players[1].eliminated).toBe(true);
-    expect(afterWin.players[2].eliminated).toBe(true);
-    expect(afterWin.winner).toBe('p1');
+    expect(afterWin.lastOutcome?.potWon).toBe(2);
+    // 1 own + 1 opponent + (2 pot * 2 SEA multiplier) = 6 pts
+    expect(afterWin.lastOutcome?.pointsAwarded).toBe(6);
+    expect(afterWin.players[0].score).toBe(6);
   });
 
-  it('Blue Pill: enforces 60-round cap and crowns player with highest card count', () => {
-    const capState = buildCustomState({
+  it('Blue Pill: supports Classic 60-round cap and 2v2 Teams scoring', () => {
+    const teamPointsState = buildCustomState({
+      round: 12,
+      maxRounds: 12,
+      teamMode: 'teams',
+      gameMode: 'points',
+      activeTurnIndex: 1,
+      activeRealm: 'SKY',
+      players: [
+        makePlayer(0, { team: 0, score: 4, deck: ['apollo', 'zeus'] }),
+        makePlayer(1, { team: 1, score: 8, deck: ['thor', 'odin'] }),
+        makePlayer(2, { team: 0, score: 3, deck: ['poseidon', 'hades'] }),
+        makePlayer(3, { team: 1, score: 6, deck: ['ra', 'isis'] }),
+      ],
+    });
+
+    const resolvedPoints = playFullRound(teamPointsState, 'might');
+    expect(resolvedPoints.winner).toBe('TEAM_1');
+
+    const classicCap = buildCustomState({
+      matchPreset: 'classic',
+      gameMode: 'classic',
       round: MAX_ROUNDS,
       maxRounds: MAX_ROUNDS,
       activeTurnIndex: 0,
-      activeRealm: 'SKY',
       players: [
         makePlayer(0, { deck: ['zeus', 'apollo', 'athena'] }),
         makePlayer(1, { deck: ['odin', 'thor'] }),
       ],
     });
-
-    const resolved = reduceMatchState(capState, {
-      type: 'PICK_STAT',
-      playerIndex: 0,
-      stat: 'influence',
-    });
-
-    expect(resolved.winner).toBe('p1');
+    const resolvedClassic = playFullRound(classicCap, 'influence');
+    expect(resolvedClassic.winner).toBe('p1');
   });
 
-  it('Blue Pill: supports 2v2 teams mode (Seats 0&2 vs 1&3) with combined card counts at round cap', () => {
-    const teamState = buildCustomState({
-      round: MAX_ROUNDS,
-      maxRounds: MAX_ROUNDS,
-      teamMode: 'teams',
-      activeTurnIndex: 1,
-      activeRealm: 'SKY',
-      players: [
-        makePlayer(0, { team: 0, deck: ['apollo', 'zeus', 'athena'] }), // Team 0: 3
-        makePlayer(1, { team: 1, deck: ['thor', 'odin', 'loki', 'freya'] }), // Team 1: 4
-        makePlayer(2, { team: 0, deck: ['poseidon', 'hades'] }), // Team 0: 2 (Total 5)
-        makePlayer(3, { team: 1, deck: ['ra', 'isis', 'osiris'] }), // Team 1: 3 (Total 7)
-      ],
-    });
-
-    const resolved = reduceMatchState(teamState, {
-      type: 'PICK_STAT',
-      playerIndex: 1,
-      stat: 'might',
-    });
-
-    expect(resolved.winner).toBe('TEAM_1');
-  });
-
-  it('Blue Pill: same seed produces identical bot simulations from start to finish', () => {
+  it('Blue Pill: same seed produces identical 4-player Blitz bot simulations start to finish', () => {
     const runMatch = (seed: number) => {
-      let state = createInitialMatchState(seed, { playerCount: 4 });
+      let state = createInitialMatchState(seed, { playerCount: 4, matchPreset: 'blitz' });
       let steps = 0;
-      while (state.winner === 'NONE' && steps < 150) {
+      while (state.winner === 'NONE' && steps < 120) {
         const action = chooseBotAction(state);
         expect(action).not.toBeNull();
         state = reduceMatchState(state, action!);
@@ -304,12 +378,15 @@ describe('gameEngine deterministic 2-4 player mechanics', () => {
     const runB = runMatch(98765);
     expect(runA).toEqual(runB);
     expect(runA.winner).not.toBe('NONE');
+    expect(runA.round).toBeLessThanOrEqual(13);
   });
 
-  it('Red Pill: rejects out-of-turn actions, invalid stat keys, reused gambit, and post-victory mutations', () => {
+  it('Red Pill: rejects out-of-turn actions, invalid hand indices, invalid stat keys, and post-victory mutations', () => {
     const initial = buildCustomState({ activeTurnIndex: 0 });
 
     expect(reduceMatchState(initial, { type: 'PICK_STAT', playerIndex: 1, stat: 'might' })).toBe(initial);
+    expect(reduceMatchState(initial, { type: 'PICK_STAT', playerIndex: 0, stat: 'might', handIndex: 5 })).toBe(initial);
+    expect(reduceMatchState(initial, { type: 'DEFEND_CARD', playerIndex: 1, handIndex: 0 })).toBe(initial);
     expect(reduceMatchState(initial, { type: 'TOGGLE_GAMBIT', playerIndex: 1 })).toBe(initial);
     expect(
       reduceMatchState(initial, {
@@ -318,12 +395,6 @@ describe('gameEngine deterministic 2-4 player mechanics', () => {
         stat: 'invalid_stat' as StatKey,
       }),
     ).toBe(initial);
-
-    const spentGambit = buildCustomState({
-      activeTurnIndex: 0,
-      players: [makePlayer(0, { gambitUsed: true }), makePlayer(1)],
-    });
-    expect(reduceMatchState(spentGambit, { type: 'TOGGLE_GAMBIT', playerIndex: 0 })).toBe(spentGambit);
 
     const finished = buildCustomState({ winner: 'p1' });
     expect(reduceMatchState(finished, { type: 'PICK_STAT', playerIndex: 0, stat: 'might' })).toBe(finished);

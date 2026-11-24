@@ -2,10 +2,13 @@ import { ALL_CARDS, getCardById } from '../data/cards';
 import type {
   BestWinRecord,
   CardStats,
+  GameMode,
   MatchAction,
+  MatchPreset,
   MatchState,
   MatchWinner,
   MythCard,
+  PendingClash,
   PlayedCardEntry,
   PlayerCount,
   PlayerSeedConfig,
@@ -23,14 +26,51 @@ export const REALMS: readonly Realm[] = ['SKY', 'NETHER', 'SEA', 'WAR'];
 export const STAT_KEYS: readonly StatKey[] = ['might', 'arcana', 'cunning', 'influence'];
 export const SEAT_IDS: readonly SeatId[] = ['p1', 'p2', 'p3', 'p4'];
 export const REALM_BONUS = 15;
+export const WAR_REALM_BONUS = 20;
 export const ROUNDS_PER_REALM = 3;
 export const MAX_ROUNDS = 60;
+export const HAND_SIZE = 3;
 export const TURN_TIMEOUT_SECONDS = 20;
+
+export const MATCH_PRESETS: Record<
+  MatchPreset,
+  {
+    label: string;
+    shortLabel: string;
+    cardsPerPlayer: number;
+    maxRounds: number;
+    gameMode: GameMode;
+  }
+> = {
+  blitz: {
+    label: 'Blitz (12R)',
+    shortLabel: '12R Blitz',
+    cardsPerPlayer: 12,
+    maxRounds: 12,
+    gameMode: 'points',
+  },
+  standard: {
+    label: 'Standard (15R)',
+    shortLabel: '15R Std',
+    cardsPerPlayer: 15,
+    maxRounds: 15,
+    gameMode: 'points',
+  },
+  classic: {
+    label: 'Classic War (60R)',
+    shortLabel: '60R War',
+    cardsPerPlayer: 0,
+    maxRounds: 60,
+    gameMode: 'classic',
+  },
+};
 
 export interface InitialMatchOptions {
   playerCount?: PlayerCount;
   players?: PlayerSeedConfig[];
   teamMode?: TeamMode;
+  matchPreset?: MatchPreset;
+  gameMode?: GameMode;
   maxRounds?: number;
 }
 
@@ -57,58 +97,103 @@ export function getRealmForRound(matchSeed: number, round: number): Realm {
 }
 
 /**
+ * Computes per-stat bonus for a card in the active realm, accounting for PIERCING negation.
+ */
+export function getStatBonusForRealm(
+  card: MythCard,
+  activeRealm: Realm,
+  stat: StatKey,
+  pierced = false,
+): number {
+  if (card.domain !== activeRealm || pierced) {
+    return 0;
+  }
+  if (activeRealm === 'SKY') {
+    return stat === 'arcana' || stat === 'influence' ? 20 : REALM_BONUS;
+  }
+  if (activeRealm === 'WAR') {
+    return stat === 'might' ? 25 : WAR_REALM_BONUS;
+  }
+  return REALM_BONUS;
+}
+
+/**
  * Computes effective stats for `card` facing `opponentCard` in `activeRealm` (2-card helper).
- * Grants +15 to matching domain unless negated by opponent's PIERCING passive.
  */
 export function computeEffectiveStats(
   card: MythCard,
   opponentCard: MythCard,
   activeRealm: Realm,
-): { bonus: number; pierced: boolean; effectiveStats: CardStats } {
+): { bonus: number; pierced: boolean; effectiveStats: CardStats; statBonuses: CardStats } {
   const hasDomainMatch = card.domain === activeRealm;
   const negatedByPiercing = opponentCard.passive === 'PIERCING';
-  const bonus = hasDomainMatch && !negatedByPiercing ? REALM_BONUS : 0;
+  const pierced = hasDomainMatch && negatedByPiercing;
+
+  const statBonuses: CardStats = {
+    might: getStatBonusForRealm(card, activeRealm, 'might', pierced),
+    arcana: getStatBonusForRealm(card, activeRealm, 'arcana', pierced),
+    cunning: getStatBonusForRealm(card, activeRealm, 'cunning', pierced),
+    influence: getStatBonusForRealm(card, activeRealm, 'influence', pierced),
+  };
+
+  const baseBonus = hasDomainMatch && !pierced ? (activeRealm === 'WAR' ? WAR_REALM_BONUS : REALM_BONUS) : 0;
 
   return {
-    bonus,
-    pierced: hasDomainMatch && negatedByPiercing,
+    bonus: baseBonus,
+    pierced,
+    statBonuses,
     effectiveStats: {
-      might: card.stats.might + bonus,
-      arcana: card.stats.arcana + bonus,
-      cunning: card.stats.cunning + bonus,
-      influence: card.stats.influence + bonus,
+      might: card.stats.might + statBonuses.might,
+      arcana: card.stats.arcana + statBonuses.arcana,
+      cunning: card.stats.cunning + statBonuses.cunning,
+      influence: card.stats.influence + statBonuses.influence,
     },
   };
 }
 
 /**
  * Computes effective stats across 2-4 active players in a clash.
- * Any active opponent holding a PIERCING card negates the +15 realm bonus for all other cards.
+ * Any active opponent holding a PIERCING card negates the realm bonus for all other cards.
  */
 export function computeEffectiveStatsForRound(
   activeCards: readonly { seatIndex: number; card: MythCard }[],
   activeRealm: Realm,
-): Record<number, { bonus: number; pierced: boolean; effectiveStats: CardStats }> {
+): Record<
+  number,
+  { bonus: number; pierced: boolean; effectiveStats: CardStats; statBonuses: CardStats }
+> {
   const piercingSeats = activeCards
     .filter((entry) => entry.card.passive === 'PIERCING')
     .map((entry) => entry.seatIndex);
 
-  const result: Record<number, { bonus: number; pierced: boolean; effectiveStats: CardStats }> = {};
+  const result: Record<
+    number,
+    { bonus: number; pierced: boolean; effectiveStats: CardStats; statBonuses: CardStats }
+  > = {};
 
   for (const entry of activeCards) {
     const hasDomainMatch = entry.card.domain === activeRealm;
     const opponentHasPiercing = piercingSeats.some((seat) => seat !== entry.seatIndex);
     const pierced = hasDomainMatch && opponentHasPiercing;
-    const bonus = hasDomainMatch && !opponentHasPiercing ? REALM_BONUS : 0;
+    const baseBonus =
+      hasDomainMatch && !pierced ? (activeRealm === 'WAR' ? WAR_REALM_BONUS : REALM_BONUS) : 0;
+
+    const statBonuses: CardStats = {
+      might: getStatBonusForRealm(entry.card, activeRealm, 'might', pierced),
+      arcana: getStatBonusForRealm(entry.card, activeRealm, 'arcana', pierced),
+      cunning: getStatBonusForRealm(entry.card, activeRealm, 'cunning', pierced),
+      influence: getStatBonusForRealm(entry.card, activeRealm, 'influence', pierced),
+    };
 
     result[entry.seatIndex] = {
-      bonus,
+      bonus: baseBonus,
       pierced,
+      statBonuses,
       effectiveStats: {
-        might: entry.card.stats.might + bonus,
-        arcana: entry.card.stats.arcana + bonus,
-        cunning: entry.card.stats.cunning + bonus,
-        influence: entry.card.stats.influence + bonus,
+        might: entry.card.stats.might + statBonuses.might,
+        arcana: entry.card.stats.arcana + statBonuses.arcana,
+        cunning: entry.card.stats.cunning + statBonuses.cunning,
+        influence: entry.card.stats.influence + statBonuses.influence,
       },
     };
   }
@@ -117,7 +202,7 @@ export function computeEffectiveStatsForRound(
 }
 
 /**
- * Deterministically reveals one stat of `targetIndex`'s top card when `viewerIndex`'s top card has PROPHECY.
+ * Deterministically reveals one stat of `targetIndex`'s lead card when `viewerIndex` holds a PROPHECY card in hand.
  */
 export function getProphecyStatForTarget(
   state: MatchState,
@@ -139,12 +224,12 @@ export function getProphecyStatForTarget(
     return null;
   }
 
-  const viewerCard = getCardById(viewer.deck[0]);
-  const targetCard = getCardById(target.deck[0]);
-  if (viewerCard.passive !== 'PROPHECY') {
+  const viewerHand = viewer.deck.slice(0, HAND_SIZE).map((id) => getCardById(id));
+  if (!viewerHand.some((c) => c.passive === 'PROPHECY')) {
     return null;
   }
 
+  const targetCard = getCardById(target.deck[0]);
   const activeCards = state.players
     .filter((p) => !p.eliminated && p.deck.length > 0)
     .map((p) => ({ seatIndex: p.seatIndex, card: getCardById(p.deck[0]) }));
@@ -202,13 +287,21 @@ export function createInitialMatchState(
   const rawCount = options.players?.length ?? options.playerCount ?? 2;
   const playerCount: PlayerCount = rawCount >= 4 ? 4 : rawCount === 3 ? 3 : 2;
   const teamMode: TeamMode = playerCount === 4 && options.teamMode === 'teams' ? 'teams' : 'ffa';
-  const maxRounds = Math.max(1, options.maxRounds ?? MAX_ROUNDS);
+
+  const matchPreset: MatchPreset = options.matchPreset ?? 'blitz';
+  const presetCfg = MATCH_PRESETS[matchPreset];
+  const gameMode: GameMode = options.gameMode ?? presetCfg.gameMode;
+  const maxRounds = Math.max(1, options.maxRounds ?? presetCfg.maxRounds);
 
   const shuffledIds = shuffleDeterministic(
     cards.map((card) => card.id),
     seed,
   );
-  const cardsPerPlayer = Math.floor(shuffledIds.length / playerCount);
+  const maxEvenSplit = Math.floor(shuffledIds.length / playerCount);
+  const cardsPerPlayer =
+    presetCfg.cardsPerPlayer > 0
+      ? Math.min(presetCfg.cardsPerPlayer, maxEvenSplit)
+      : maxEvenSplit;
 
   const players: PlayerState[] = Array.from({ length: playerCount }, (_, idx) => {
     const cfg = options.players?.[idx];
@@ -222,6 +315,7 @@ export function createInitialMatchState(
       uid: cfg?.uid ?? null,
       team: idx % 2 === 0 ? 0 : 1,
       deck: shuffledIds.slice(start, start + cardsPerPlayer),
+      score: 0,
       resurrectionUsed: false,
       gambitUsed: false,
       eliminated: false,
@@ -236,13 +330,17 @@ export function createInitialMatchState(
 
   return {
     matchSeed: seed,
+    matchPreset,
+    gameMode,
     round: 1,
     maxRounds,
     teamMode,
+    roundPhase: 'attack',
     activeTurnIndex,
     activeRealm: getRealmForRound(seed, 1),
     players,
     warPot: [],
+    pendingClash: null,
     gambitArmed: false,
     prophecyTarget: null,
     statWins: { might: 0, arcana: 0, cunning: 0, influence: 0 },
@@ -266,14 +364,71 @@ export function findNextActiveSeatIndex(players: readonly PlayerState[], fromInd
   return 0;
 }
 
+function findNextPendingDefenderIndex(
+  players: readonly PlayerState[],
+  fromIndex: number,
+  selections: Record<string, string>,
+): number | null {
+  const n = players.length;
+  for (let offset = 1; offset <= n; offset += 1) {
+    const idx = (fromIndex + offset) % n;
+    const candidate = players[idx];
+    if (!candidate.eliminated && candidate.deck.length > 0 && !selections[candidate.id]) {
+      return idx;
+    }
+  }
+  return null;
+}
+
 function evaluateMatchWinner(
   players: readonly PlayerState[],
   teamMode: TeamMode,
+  gameMode: GameMode,
   resolvedRound: number,
   maxRounds: number,
 ): MatchWinner {
   const alive = players.filter((p) => !p.eliminated && p.deck.length > 0);
 
+  if (gameMode === 'points') {
+    const shouldEnd = alive.length < 2 || resolvedRound >= maxRounds;
+    if (!shouldEnd) return 'NONE';
+
+    if (teamMode === 'teams' && players.length === 4) {
+      const t0 = players.filter((p) => p.team === 0);
+      const t1 = players.filter((p) => p.team === 1);
+      const t0Score = t0.reduce((sum, p) => sum + p.score, 0);
+      const t1Score = t1.reduce((sum, p) => sum + p.score, 0);
+      if (t0Score !== t1Score) return t0Score > t1Score ? 'TEAM_0' : 'TEAM_1';
+
+      const t0Deck = t0.reduce((sum, p) => sum + p.deck.length, 0);
+      const t1Deck = t1.reduce((sum, p) => sum + p.deck.length, 0);
+      if (t0Deck !== t1Deck) return t0Deck > t1Deck ? 'TEAM_0' : 'TEAM_1';
+
+      const t0Wins = t0.reduce((sum, p) => sum + p.roundsWon, 0);
+      const t1Wins = t1.reduce((sum, p) => sum + p.roundsWon, 0);
+      if (t0Wins !== t1Wins) return t0Wins > t1Wins ? 'TEAM_0' : 'TEAM_1';
+      return 'DRAW';
+    }
+
+    const sorted = [...players].sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (b.deck.length !== a.deck.length) return b.deck.length - a.deck.length;
+      return b.roundsWon - a.roundsWon;
+    });
+    const top = sorted[0];
+    const second = sorted[1];
+    if (
+      second &&
+      top.score === second.score &&
+      top.deck.length === second.deck.length &&
+      top.roundsWon === second.roundsWon
+    ) {
+      return 'DRAW';
+    }
+    return top.id;
+  }
+
+  // Classic deck-capture mode
   if (teamMode === 'teams' && players.length === 4) {
     const team0Alive = alive.some((p) => p.team === 0);
     const team1Alive = alive.some((p) => p.team === 1);
@@ -312,15 +467,195 @@ function evaluateMatchWinner(
   return 'NONE';
 }
 
+function removeCardFromDeck(deck: readonly string[], cardId: string): string[] {
+  const idx = deck.indexOf(cardId);
+  if (idx < 0) return [...deck];
+  return [...deck.slice(0, idx), ...deck.slice(idx + 1)];
+}
+
+function resolveClashRound(state: MatchState, clash: PendingClash): MatchState {
+  const activeParticipants = state.players.filter((p) => !p.eliminated && p.deck.length > 0);
+  const leader = state.players[clash.leaderSeat] ?? activeParticipants[0];
+
+  const activeTopCards = activeParticipants.map((p) => {
+    const chosenId = clash.selections[p.id] ?? p.deck[0];
+    return {
+      seatIndex: p.seatIndex,
+      playerId: p.id,
+      cardId: chosenId,
+      card: getCardById(chosenId),
+    };
+  });
+
+  const effectiveMap = computeEffectiveStatsForRound(
+    activeTopCards.map((item) => ({ seatIndex: item.seatIndex, card: item.card })),
+    state.activeRealm,
+  );
+
+  const entries: PlayedCardEntry[] = activeTopCards.map((item) => {
+    const calc = effectiveMap[item.seatIndex];
+    return {
+      playerId: item.playerId,
+      seatIndex: item.seatIndex,
+      cardId: item.cardId,
+      baseValue: item.card.stats[clash.stat],
+      bonus: calc.statBonuses[clash.stat],
+      effectiveValue: calc.effectiveStats[clash.stat],
+      pierced: calc.pierced,
+    };
+  });
+
+  const values = entries.map((e) => e.effectiveValue);
+  const winningValue = clash.gambitActive ? Math.min(...values) : Math.max(...values);
+  const contenders = entries.filter((e) => e.effectiveValue === winningValue);
+
+  const nextPlayers: PlayerState[] = state.players.map((p) => {
+    const isActive = !p.eliminated && p.deck.length > 0;
+    const chosenId = clash.selections[p.id];
+    return {
+      ...p,
+      deck: isActive && chosenId ? removeCardFromDeck(p.deck, chosenId) : [...p.deck],
+      gambitUsed:
+        p.seatIndex === clash.leaderSeat && clash.gambitActive ? true : p.gambitUsed,
+    };
+  });
+
+  let nextWarPot = [...state.warPot];
+  const resurrectedPlayers: SeatId[] = [];
+  let roundWinnerId: RoundOutcome['winnerId'] = 'TIE';
+  let tiedPlayerIds: SeatId[] = [];
+  let potWon = 0;
+  let pointsAwarded = 0;
+  let nextActiveTurnIndex = clash.leaderSeat;
+  const nextStatWins = { ...state.statWins };
+  let nextBestWin: BestWinRecord | null = state.bestWin;
+
+  if (contenders.length > 1) {
+    tiedPlayerIds = contenders.map((c) => c.playerId);
+    nextWarPot = [...state.warPot, ...entries.map((e) => e.cardId)];
+  } else {
+    const winnerEntry = contenders[0];
+    roundWinnerId = winnerEntry.playerId;
+    potWon = state.warPot.length;
+
+    const capturedCards: string[] = [];
+    for (const entry of entries) {
+      if (entry.seatIndex === winnerEntry.seatIndex) continue;
+      const loser = nextPlayers[entry.seatIndex];
+      const loserCard = getCardById(entry.cardId);
+      const freeNetherResurrection = state.activeRealm === 'NETHER';
+      if (loserCard.passive === 'RESURRECTION' && (!loser.resurrectionUsed || freeNetherResurrection)) {
+        if (!freeNetherResurrection) {
+          loser.resurrectionUsed = true;
+        }
+        loser.deck = [...loser.deck, entry.cardId];
+        resurrectedPlayers.push(loser.id);
+      } else {
+        capturedCards.push(entry.cardId);
+      }
+    }
+
+    const winnerPlayer = nextPlayers[winnerEntry.seatIndex];
+    const seaPotMultiplier = state.activeRealm === 'SEA' ? 2 : 1;
+    pointsAwarded = 1 + capturedCards.length + state.warPot.length * seaPotMultiplier;
+
+    if (state.gameMode === 'classic') {
+      winnerPlayer.deck = [
+        ...winnerPlayer.deck,
+        winnerEntry.cardId,
+        ...capturedCards,
+        ...state.warPot,
+      ];
+    }
+
+    winnerPlayer.score += pointsAwarded;
+    winnerPlayer.roundsWon += 1;
+    nextWarPot = [];
+    nextActiveTurnIndex = winnerPlayer.seatIndex;
+    nextStatWins[clash.stat] += 1;
+
+    if (!nextBestWin || winnerEntry.effectiveValue > nextBestWin.effectiveValue) {
+      nextBestWin = {
+        cardId: winnerEntry.cardId,
+        playerId: winnerEntry.playerId,
+        stat: clash.stat,
+        effectiveValue: winnerEntry.effectiveValue,
+        round: state.round,
+      };
+    }
+  }
+
+  for (const player of nextPlayers) {
+    if (player.deck.length === 0) {
+      player.eliminated = true;
+    }
+  }
+
+  const matchWinner = evaluateMatchWinner(
+    nextPlayers,
+    state.teamMode,
+    state.gameMode,
+    state.round,
+    state.maxRounds,
+  );
+
+  if (matchWinner === 'NONE') {
+    if (roundWinnerId === 'TIE') {
+      nextActiveTurnIndex = findNextActiveSeatIndex(nextPlayers, clash.leaderSeat);
+    } else if (
+      nextPlayers[nextActiveTurnIndex].eliminated ||
+      nextPlayers[nextActiveTurnIndex].deck.length === 0
+    ) {
+      nextActiveTurnIndex = findNextActiveSeatIndex(nextPlayers, nextActiveTurnIndex);
+    }
+  }
+
+  const nextRound = state.round + 1;
+
+  return {
+    matchSeed: state.matchSeed,
+    matchPreset: state.matchPreset,
+    gameMode: state.gameMode,
+    round: nextRound,
+    maxRounds: state.maxRounds,
+    teamMode: state.teamMode,
+    roundPhase: 'attack',
+    activeTurnIndex: nextActiveTurnIndex,
+    activeRealm: getRealmForRound(state.matchSeed, nextRound),
+    players: nextPlayers,
+    warPot: nextWarPot,
+    pendingClash: null,
+    gambitArmed: false,
+    prophecyTarget: null,
+    statWins: nextStatWins,
+    bestWin: nextBestWin,
+    winner: matchWinner,
+    lastOutcome: {
+      round: state.round,
+      leaderId: leader.id,
+      stat: clash.stat,
+      entries,
+      gambitActive: clash.gambitActive,
+      resurrectedPlayers,
+      winnerId: roundWinnerId,
+      tiedPlayerIds,
+      potWon,
+      potSizeAfter: nextWarPot.length,
+      pointsAwarded,
+    },
+  };
+}
+
 /**
  * Pure reducer resolving all game actions for 2-4 players with zero side effects.
  */
 export function reduceMatchState(state: MatchState, action: MatchAction): MatchState {
   if (action.type === 'RESET_MATCH') {
+    const nextPreset = action.matchPreset ?? state.matchPreset;
     return createInitialMatchState(action.matchSeed ?? state.matchSeed, {
       playerCount: state.players.length as PlayerCount,
       teamMode: state.teamMode,
-      maxRounds: state.maxRounds,
+      matchPreset: nextPreset,
       players: state.players.map((p) => ({
         name: p.name,
         isBot: p.isBot,
@@ -341,7 +676,13 @@ export function reduceMatchState(state: MatchState, action: MatchAction): MatchS
 
   if (action.type === 'TOGGLE_GAMBIT') {
     const actor = state.players[action.playerIndex];
-    if (!actor || action.playerIndex !== state.activeTurnIndex || actor.gambitUsed) {
+    if (
+      !actor ||
+      state.roundPhase !== 'attack' ||
+      state.activeRealm === 'WAR' ||
+      action.playerIndex !== state.activeTurnIndex ||
+      actor.gambitUsed
+    ) {
       return state;
     }
     return {
@@ -356,6 +697,7 @@ export function reduceMatchState(state: MatchState, action: MatchAction): MatchS
     if (
       !actor ||
       !target ||
+      state.roundPhase !== 'attack' ||
       action.playerIndex !== state.activeTurnIndex ||
       action.playerIndex === action.targetIndex ||
       actor.eliminated ||
@@ -387,170 +729,111 @@ export function reduceMatchState(state: MatchState, action: MatchAction): MatchS
     };
   }
 
-  if (action.type !== 'PICK_STAT') {
-    return state;
-  }
-
-  const leader = state.players[state.activeTurnIndex];
-  if (
-    !leader ||
-    action.playerIndex !== state.activeTurnIndex ||
-    leader.eliminated ||
-    leader.deck.length === 0 ||
-    !STAT_KEYS.includes(action.stat)
-  ) {
-    return state;
-  }
-
-  const canUseGambit = !leader.gambitUsed;
-  const gambitActive = canUseGambit && (action.useGambit ?? state.gambitArmed);
-
-  const activeTopCards = activeParticipants.map((p) => ({
-    seatIndex: p.seatIndex,
-    playerId: p.id,
-    cardId: p.deck[0],
-    card: getCardById(p.deck[0]),
-  }));
-
-  const effectiveMap = computeEffectiveStatsForRound(
-    activeTopCards.map((item) => ({ seatIndex: item.seatIndex, card: item.card })),
-    state.activeRealm,
-  );
-
-  const entries: PlayedCardEntry[] = activeTopCards.map((item) => {
-    const calc = effectiveMap[item.seatIndex];
-    return {
-      playerId: item.playerId,
-      seatIndex: item.seatIndex,
-      cardId: item.cardId,
-      baseValue: item.card.stats[action.stat],
-      bonus: calc.bonus,
-      effectiveValue: calc.effectiveStats[action.stat],
-      pierced: calc.pierced,
-    };
-  });
-
-  const values = entries.map((e) => e.effectiveValue);
-  const winningValue = gambitActive ? Math.min(...values) : Math.max(...values);
-  const contenders = entries.filter((e) => e.effectiveValue === winningValue);
-
-  // Clone mutable player decks/flags cleanly
-  const nextPlayers: PlayerState[] = state.players.map((p) => {
-    const isActive = !p.eliminated && p.deck.length > 0;
-    return {
-      ...p,
-      deck: isActive ? p.deck.slice(1) : [...p.deck],
-      gambitUsed:
-        p.seatIndex === leader.seatIndex && gambitActive ? true : p.gambitUsed,
-    };
-  });
-
-  let nextWarPot = [...state.warPot];
-  const resurrectedPlayers: SeatId[] = [];
-  let roundWinnerId: RoundOutcome['winnerId'] = 'TIE';
-  let tiedPlayerIds: SeatId[] = [];
-  let potWon = 0;
-  let nextActiveTurnIndex = state.activeTurnIndex;
-  const nextStatWins = { ...state.statWins };
-  let nextBestWin: BestWinRecord | null = state.bestWin;
-
-  if (contenders.length > 1) {
-    tiedPlayerIds = contenders.map((c) => c.playerId);
-    nextWarPot = [...state.warPot, ...entries.map((e) => e.cardId)];
-  } else {
-    const winnerEntry = contenders[0];
-    roundWinnerId = winnerEntry.playerId;
-    potWon = state.warPot.length;
-
-    const capturedCards: string[] = [];
-    for (const entry of entries) {
-      if (entry.seatIndex === winnerEntry.seatIndex) continue;
-      const loser = nextPlayers[entry.seatIndex];
-      const loserCard = getCardById(entry.cardId);
-      if (loserCard.passive === 'RESURRECTION' && !loser.resurrectionUsed) {
-        loser.resurrectionUsed = true;
-        loser.deck = [...loser.deck, entry.cardId];
-        resurrectedPlayers.push(loser.id);
-      } else {
-        capturedCards.push(entry.cardId);
-      }
-    }
-
-    const winnerPlayer = nextPlayers[winnerEntry.seatIndex];
-    winnerPlayer.deck = [
-      ...winnerPlayer.deck,
-      winnerEntry.cardId,
-      ...capturedCards,
-      ...state.warPot,
-    ];
-    winnerPlayer.roundsWon += 1;
-    nextWarPot = [];
-    nextActiveTurnIndex = winnerPlayer.seatIndex;
-    nextStatWins[action.stat] += 1;
-
-    if (!nextBestWin || winnerEntry.effectiveValue > nextBestWin.effectiveValue) {
-      nextBestWin = {
-        cardId: winnerEntry.cardId,
-        playerId: winnerEntry.playerId,
-        stat: action.stat,
-        effectiveValue: winnerEntry.effectiveValue,
-        round: state.round,
-      };
-    }
-  }
-
-  for (const player of nextPlayers) {
-    if (player.deck.length === 0) {
-      player.eliminated = true;
-    }
-  }
-
-  const matchWinner = evaluateMatchWinner(nextPlayers, state.teamMode, state.round, state.maxRounds);
-
-  if (matchWinner === 'NONE') {
-    if (roundWinnerId === 'TIE') {
-      nextActiveTurnIndex = findNextActiveSeatIndex(nextPlayers, state.activeTurnIndex);
-    } else if (
-      nextPlayers[nextActiveTurnIndex].eliminated ||
-      nextPlayers[nextActiveTurnIndex].deck.length === 0
+  if (action.type === 'PICK_STAT') {
+    const leader = state.players[state.activeTurnIndex];
+    if (
+      !leader ||
+      state.roundPhase !== 'attack' ||
+      action.playerIndex !== state.activeTurnIndex ||
+      leader.eliminated ||
+      leader.deck.length === 0 ||
+      !STAT_KEYS.includes(action.stat)
     ) {
-      nextActiveTurnIndex = findNextActiveSeatIndex(nextPlayers, nextActiveTurnIndex);
+      return state;
     }
+
+    const handCount = Math.min(HAND_SIZE, leader.deck.length);
+    const handIdx = action.handIndex ?? 0;
+    if (!Number.isInteger(handIdx) || handIdx < 0 || handIdx >= handCount) {
+      return state;
+    }
+
+    const chosenCardId = leader.deck[handIdx];
+    const canUseGambit = !leader.gambitUsed && state.activeRealm !== 'WAR';
+    const gambitActive = canUseGambit && (action.useGambit ?? state.gambitArmed);
+
+    const selections: Record<string, string> = {
+      [leader.id]: chosenCardId,
+    };
+
+    const nextClash: PendingClash = {
+      leaderSeat: leader.seatIndex,
+      stat: action.stat,
+      gambitActive,
+      selections,
+    };
+
+    const nextDefender = findNextPendingDefenderIndex(
+      state.players,
+      leader.seatIndex,
+      selections,
+    );
+
+    if (nextDefender === null) {
+      return resolveClashRound(state, nextClash);
+    }
+
+    return {
+      ...state,
+      roundPhase: 'defend',
+      activeTurnIndex: nextDefender,
+      pendingClash: nextClash,
+      gambitArmed: false,
+    };
   }
 
-  const nextRound = state.round + 1;
+  if (action.type === 'DEFEND_CARD') {
+    if (state.roundPhase !== 'defend' || !state.pendingClash) {
+      return state;
+    }
+    const defender = state.players[state.activeTurnIndex];
+    if (
+      !defender ||
+      action.playerIndex !== state.activeTurnIndex ||
+      defender.eliminated ||
+      defender.deck.length === 0 ||
+      state.pendingClash.selections[defender.id]
+    ) {
+      return state;
+    }
 
-  return {
-    matchSeed: state.matchSeed,
-    round: nextRound,
-    maxRounds: state.maxRounds,
-    teamMode: state.teamMode,
-    activeTurnIndex: nextActiveTurnIndex,
-    activeRealm: getRealmForRound(state.matchSeed, nextRound),
-    players: nextPlayers,
-    warPot: nextWarPot,
-    gambitArmed: false,
-    prophecyTarget: null,
-    statWins: nextStatWins,
-    bestWin: nextBestWin,
-    winner: matchWinner,
-    lastOutcome: {
-      round: state.round,
-      leaderId: leader.id,
-      stat: action.stat,
-      entries,
-      gambitActive,
-      resurrectedPlayers,
-      winnerId: roundWinnerId,
-      tiedPlayerIds,
-      potWon,
-      potSizeAfter: nextWarPot.length,
-    },
-  };
+    const handCount = Math.min(HAND_SIZE, defender.deck.length);
+    if (!Number.isInteger(action.handIndex) || action.handIndex < 0 || action.handIndex >= handCount) {
+      return state;
+    }
+
+    const chosenCardId = defender.deck[action.handIndex];
+    const nextSelections: Record<string, string> = {
+      ...state.pendingClash.selections,
+      [defender.id]: chosenCardId,
+    };
+    const nextClash: PendingClash = {
+      ...state.pendingClash,
+      selections: nextSelections,
+    };
+
+    const nextDefender = findNextPendingDefenderIndex(
+      state.players,
+      defender.seatIndex,
+      nextSelections,
+    );
+
+    if (nextDefender === null) {
+      return resolveClashRound(state, nextClash);
+    }
+
+    return {
+      ...state,
+      activeTurnIndex: nextDefender,
+      pendingClash: nextClash,
+    };
+  }
+
+  return state;
 }
 
 /**
- * Deterministic bot policy for 2-4 player games using only MatchState and Mulberry32 PRNG.
+ * Deterministic bot policy for 2-4 player games with 3-card hand selection on both attack & defense.
  */
 export function chooseBotAction(state: MatchState): MatchAction | null {
   if (state.winner !== 'NONE') return null;
@@ -563,26 +846,70 @@ export function chooseBotAction(state: MatchState): MatchAction | null {
   );
   if (opponents.length === 0) return null;
 
-  const botCard = getCardById(bot.deck[0]);
-  const activeCards = state.players
-    .filter((p) => !p.eliminated && p.deck.length > 0)
-    .map((p) => ({ seatIndex: p.seatIndex, card: getCardById(p.deck[0]) }));
+  const botHand = bot.deck.slice(0, Math.min(HAND_SIZE, bot.deck.length)).map((id, handIndex) => ({
+    handIndex,
+    cardId: id,
+    card: getCardById(id),
+  }));
 
-  const effectiveMap = computeEffectiveStatsForRound(activeCards, state.activeRealm);
-  const botEffective = effectiveMap[botIndex].effectiveStats;
-  const canUseGambit = !bot.gambitUsed;
+  // Defense phase: pick the best counter-card from hand for the challenged stat
+  if (state.roundPhase === 'defend' && state.pendingClash) {
+    const stat = state.pendingClash.stat;
+    const gambitActive = state.pendingClash.gambitActive;
+    const rng = mulberry32(deriveSeed(state.matchSeed, state.round, 131 + botIndex));
 
-  // If bot has PROPHECY and multiple opponents and hasn't spied yet this round, pick a target first
-  if (botCard.passive === 'PROPHECY') {
+    const scoredHand = botHand.map((item) => {
+      const effectiveVal =
+        item.card.stats[stat] + getStatBonusForRealm(item.card, state.activeRealm, stat, false);
+      return {
+        handIndex: item.handIndex,
+        card: item.card,
+        effectiveVal,
+        tieBreak: rng(),
+      };
+    });
+
+    if (gambitActive) {
+      const lowest = [...scoredHand].sort((a, b) =>
+        a.effectiveVal !== b.effectiveVal ? a.effectiveVal - b.effectiveVal : a.tieBreak - b.tieBreak,
+      )[0];
+      return { type: 'DEFEND_CARD', playerIndex: botIndex, handIndex: lowest.handIndex };
+    }
+
+    const sortedBest = [...scoredHand].sort((a, b) =>
+      b.effectiveVal !== a.effectiveVal ? b.effectiveVal - a.effectiveVal : b.tieBreak - a.tieBreak,
+    );
+    const sortedWeakest = [...scoredHand].sort((a, b) =>
+      a.effectiveVal !== b.effectiveVal ? a.effectiveVal - b.effectiveVal : a.tieBreak - b.tieBreak,
+    );
+
+    const best = sortedBest[0];
+    // If War Pot is empty and best card is weak (< 62) with multiple cards in hand, sacrifice weakest (preferring Resurrection)
+    if (state.warPot.length === 0 && best.effectiveVal < 62 && botHand.length > 1) {
+      const resSacrifice = sortedWeakest.find((item) => item.card.passive === 'RESURRECTION');
+      const sacrifice = resSacrifice ?? sortedWeakest[0];
+      return { type: 'DEFEND_CARD', playerIndex: botIndex, handIndex: sacrifice.handIndex };
+    }
+
+    return { type: 'DEFEND_CARD', playerIndex: botIndex, handIndex: best.handIndex };
+  }
+
+  // Attack phase: evaluate Prophecy, then pick optimal (handIndex, stat, useGambit)
+  const canUseGambit = !bot.gambitUsed && state.activeRealm !== 'WAR';
+  const hasProphecyInHand = botHand.some((h) => h.card.passive === 'PROPHECY');
+
+  if (hasProphecyInHand) {
     if (
       opponents.length > 1 &&
       (!state.prophecyTarget || state.prophecyTarget.bySeat !== botIndex)
     ) {
       const targetRng = mulberry32(deriveSeed(state.matchSeed, state.round, 71 + botIndex));
       const rankedOpponents = [...opponents].sort((a, b) =>
-        b.deck.length !== a.deck.length
-          ? b.deck.length - a.deck.length
-          : targetRng() - 0.5,
+        b.score !== a.score
+          ? b.score - a.score
+          : b.deck.length !== a.deck.length
+            ? b.deck.length - a.deck.length
+            : targetRng() - 0.5,
       );
       return {
         type: 'SELECT_PROPHECY_TARGET',
@@ -597,42 +924,65 @@ export function chooseBotAction(state: MatchState): MatchAction | null {
         : getProphecyStatForTarget(state, botIndex, opponents[0].seatIndex);
 
     if (prophecyHint) {
-      const myVal = botEffective[prophecyHint.stat];
-      if (myVal > prophecyHint.effectiveValue) {
+      const stat = prophecyHint.stat;
+      const winningChoice = botHand
+        .map((item) => ({
+          handIndex: item.handIndex,
+          val: item.card.stats[stat] + getStatBonusForRealm(item.card, state.activeRealm, stat, false),
+        }))
+        .sort((a, b) => b.val - a.val)[0];
+
+      if (winningChoice && winningChoice.val > prophecyHint.effectiveValue) {
         return {
           type: 'PICK_STAT',
           playerIndex: botIndex,
-          stat: prophecyHint.stat,
+          handIndex: winningChoice.handIndex,
+          stat,
           useGambit: false,
         };
       }
-      if (
-        canUseGambit &&
-        myVal < prophecyHint.effectiveValue &&
-        prophecyHint.effectiveValue >= 78 &&
-        myVal <= 55
-      ) {
-        return {
-          type: 'PICK_STAT',
-          playerIndex: botIndex,
-          stat: prophecyHint.stat,
-          useGambit: true,
-        };
+
+      if (canUseGambit && prophecyHint.effectiveValue >= 78) {
+        const lowestChoice = botHand
+          .map((item) => ({
+            handIndex: item.handIndex,
+            val: item.card.stats[stat] + getStatBonusForRealm(item.card, state.activeRealm, stat, false),
+          }))
+          .sort((a, b) => a.val - b.val)[0];
+
+        if (lowestChoice && lowestChoice.val < prophecyHint.effectiveValue && lowestChoice.val <= 55) {
+          return {
+            type: 'PICK_STAT',
+            playerIndex: botIndex,
+            handIndex: lowestChoice.handIndex,
+            stat,
+            useGambit: true,
+          };
+        }
       }
     }
   }
 
   const rng = mulberry32(deriveSeed(state.matchSeed, state.round, 99 + botIndex));
-  const ordered = STAT_KEYS.map((stat) => ({
-    stat,
-    value: botEffective[stat],
-    tieBreak: rng(),
-  }));
+  const options: { handIndex: number; stat: StatKey; value: number; tieBreak: number }[] = [];
 
-  const sortedDesc = [...ordered].sort((a, b) =>
+  for (const item of botHand) {
+    for (const stat of STAT_KEYS) {
+      const value =
+        item.card.stats[stat] + getStatBonusForRealm(item.card, state.activeRealm, stat, false);
+      options.push({
+        handIndex: item.handIndex,
+        stat,
+        value,
+        tieBreak: rng(),
+      });
+    }
+  }
+
+  const sortedDesc = [...options].sort((a, b) =>
     b.value !== a.value ? b.value - a.value : b.tieBreak - a.tieBreak,
   );
-  const sortedAsc = [...ordered].sort((a, b) =>
+  const sortedAsc = [...options].sort((a, b) =>
     a.value !== b.value ? a.value - b.value : b.tieBreak - a.tieBreak,
   );
 
@@ -640,8 +990,20 @@ export function chooseBotAction(state: MatchState): MatchAction | null {
   const weakest = sortedAsc[0];
 
   if (canUseGambit && strongest.value <= 64 && weakest.value <= 50) {
-    return { type: 'PICK_STAT', playerIndex: botIndex, stat: weakest.stat, useGambit: true };
+    return {
+      type: 'PICK_STAT',
+      playerIndex: botIndex,
+      handIndex: weakest.handIndex,
+      stat: weakest.stat,
+      useGambit: true,
+    };
   }
 
-  return { type: 'PICK_STAT', playerIndex: botIndex, stat: strongest.stat, useGambit: false };
+  return {
+    type: 'PICK_STAT',
+    playerIndex: botIndex,
+    handIndex: strongest.handIndex,
+    stat: strongest.stat,
+    useGambit: false,
+  };
 }

@@ -106,7 +106,7 @@ export default function App() {
       if (botAction) {
         setSoloState((prev) => soloReducer(prev, botAction));
       }
-    }, reducedMotion ? 150 : 600);
+    }, reducedMotion ? 100 : 350);
 
     return () => window.clearTimeout(timer);
   }, [activeMode, screen, soloState, reducedMotion]);
@@ -117,6 +117,7 @@ export default function App() {
       const fresh = createInitialMatchState(config.seed, {
         playerCount: 2,
         teamMode: 'ffa',
+        matchPreset: config.matchPreset ?? 'blitz',
         players: [
           {
             name: authState.user ? authState.displayName : 'Challenger',
@@ -157,6 +158,7 @@ export default function App() {
           maxPlayers: config.maxPlayers,
           teamMode: config.teamMode,
           fillWithBots: config.fillWithBots,
+          matchPreset: config.matchPreset,
         });
         setMpHistory([]);
         lastRecordedMpRound.current = null;
@@ -256,7 +258,7 @@ export default function App() {
           onOpenHowToPlay={() => setHowToPlayOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
           onAuthAction={handleHeaderAuthAction}
-          onQuickSolo={() => handleStartSolo({ seed: 202601 })}
+          onQuickSolo={() => handleStartSolo({ seed: 202601, matchPreset: 'blitz' })}
         />
 
         <div className="flex-1">

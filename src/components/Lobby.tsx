@@ -1,15 +1,16 @@
 import { useRef, useState, type ClipboardEvent, type FormEvent, type KeyboardEvent } from 'react';
 import { Bot, PlusCircle, RefreshCw, Shield, Swords, Users } from 'lucide-react';
-import { getRealmForRound } from '../engine/gameEngine';
+import { getRealmForRound, MATCH_PRESETS } from '../engine/gameEngine';
 import { parseSeedInput } from '../engine/prng';
 import type { AuthState } from '../hooks/useAuth';
 import { REALM_THEMES } from '../theme/pantheons';
-import type { FirestoreMatchDocument, PlayerCount, TeamMode } from '../types/game';
+import type { FirestoreMatchDocument, MatchPreset, PlayerCount, TeamMode } from '../types/game';
 import { getRealmLabel, RealmIcon } from './MythEmblem';
 import { Badge, Button } from './ui';
 
 export interface SoloLaunchConfig {
   seed: number;
+  matchPreset: MatchPreset;
 }
 
 export interface CreateRoomConfig {
@@ -17,6 +18,7 @@ export interface CreateRoomConfig {
   maxPlayers: PlayerCount;
   teamMode: TeamMode;
   fillWithBots: boolean;
+  matchPreset: MatchPreset;
 }
 
 interface LobbyProps {
@@ -36,6 +38,7 @@ interface LobbyProps {
 }
 
 const SEAT_COUNTS: PlayerCount[] = [2, 3, 4];
+const PRESET_ORDER: MatchPreset[] = ['blitz', 'standard', 'classic'];
 
 function formatLobbyAge(createdAt: unknown): string {
   if (
@@ -72,9 +75,11 @@ export function Lobby({
   onSweepStale,
 }: LobbyProps) {
   const [seedText, setSeedText] = useState('202601');
+  const [soloPreset, setSoloPreset] = useState<MatchPreset>('blitz');
 
   const [roomMaxPlayers, setRoomMaxPlayers] = useState<PlayerCount>(2);
   const [roomTeamMode, setRoomTeamMode] = useState<TeamMode>('ffa');
+  const [roomPreset, setRoomPreset] = useState<MatchPreset>('blitz');
   const [fillWithBots, setFillWithBots] = useState<boolean>(true);
   const [onlinePanelMode, setOnlinePanelMode] = useState<'join' | 'create'>(
     initialRoomCode ? 'join' : 'create',
@@ -104,7 +109,7 @@ export function Lobby({
 
   const handleSoloSubmit = (e: FormEvent) => {
     e.preventDefault();
-    onStartSolo({ seed: parsedSeed });
+    onStartSolo({ seed: parsedSeed, matchPreset: soloPreset });
   };
 
   const handleCreateRoom = () => {
@@ -113,6 +118,7 @@ export function Lobby({
       maxPlayers: roomMaxPlayers,
       teamMode: roomMaxPlayers === 4 ? roomTeamMode : 'ffa',
       fillWithBots,
+      matchPreset: roomPreset,
     });
   };
 
@@ -198,13 +204,35 @@ export function Lobby({
                   Play vs Bot
                 </h2>
                 <p className="text-xs sm:text-sm text-white/75 mt-1">
-                  2-player offline duel (30 cards each).
+                  3-card hand duel · {MATCH_PRESETS[soloPreset].cardsPerPlayer || 30} cards each.
                 </p>
               </div>
               <Swords className="w-5 h-5 text-amber-300 shrink-0 mt-1" aria-hidden="true" />
             </div>
 
             <form onSubmit={handleSoloSubmit} className="space-y-4">
+              <div>
+                <span className="block text-xs font-medium text-white/85 mb-1.5">
+                  Match Format
+                </span>
+                <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Solo match format">
+                  {PRESET_ORDER.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setSoloPreset(preset)}
+                      className={`min-h-[38px] rounded-xl text-xs font-semibold border transition-colors cursor-pointer px-2 ${
+                        soloPreset === preset
+                          ? 'bg-amber-400 text-slate-950 border-amber-300'
+                          : 'bg-white/10 text-white border-white/20 hover:bg-white/15'
+                      }`}
+                    >
+                      {MATCH_PRESETS[preset].shortLabel}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div>
                 <label
                   htmlFor="match-seed-input"
@@ -229,7 +257,7 @@ export function Lobby({
 
               <div className="glass-panel-md rounded-2xl p-4 space-y-2.5">
                 <div className="flex items-center justify-between text-xs text-white/75">
-                  <span>Realm Order (+15)</span>
+                  <span>Realm Order</span>
                   <span>Every 3 rounds</span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -469,6 +497,28 @@ export function Lobby({
                       )}
                     </div>
 
+                    <div>
+                      <span className="block text-xs font-medium text-white/85 mb-1.5">
+                        Match Length
+                      </span>
+                      <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Room match length">
+                        {PRESET_ORDER.map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => setRoomPreset(preset)}
+                            className={`min-h-[36px] rounded-xl text-xs font-semibold border transition-colors cursor-pointer px-2 ${
+                              roomPreset === preset
+                                ? 'bg-amber-400 text-slate-950 border-amber-300'
+                                : 'bg-white/10 text-white border-white/20 hover:bg-white/15'
+                            }`}
+                          >
+                            {MATCH_PRESETS[preset].shortLabel}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     <label className="flex items-center justify-between gap-3 rounded-xl bg-white/10 border border-white/20 px-3 py-2.5 cursor-pointer">
                       <span className="text-xs text-white font-medium">
                         Fill empty seats with bots
@@ -589,6 +639,9 @@ export function Lobby({
                                 {lobby.roomCode && (
                                   <Badge tone="gold">{lobby.roomCode}</Badge>
                                 )}
+                                <Badge tone="neutral">
+                                  {MATCH_PRESETS[lobby.matchPreset ?? 'blitz'].shortLabel}
+                                </Badge>
                                 {lobby.teamMode === 'teams' && (
                                   <Badge tone="sky">2v2</Badge>
                                 )}
