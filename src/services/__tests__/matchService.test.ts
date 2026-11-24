@@ -262,9 +262,48 @@ describe('matchService 2-4 player rooms and session cleanup', () => {
       expect(payload.round).toBe(1);
       expect(payload.maxRounds).toBe(12);
       expect(payload.winner).toBe('NONE');
+      expect(payload.warPot).toEqual([]);
+      expect(payload.pendingClash).toBeNull();
+      expect(payload.prophecyTarget).toBeNull();
+      expect(payload.bestWin).toBeNull();
+      expect(payload.lastOutcome).toBeNull();
+      expect(Object.keys(payload.statWins).sort()).toEqual([
+        'arcana',
+        'cunning',
+        'influence',
+        'might',
+      ]);
+      expect(payload.turnStartedAt).toEqual({ __serverTimestamp: true });
+      expect(payload.createdAt).toEqual({ __serverTimestamp: true });
+      expect(payload.updatedAt).toEqual({ __serverTimestamp: true });
       expect(payload.players).toHaveLength(maxPlayers);
+
+      const expectedSeatKeys = [
+        'away',
+        'deck',
+        'eliminated',
+        'gambitUsed',
+        'id',
+        'isBot',
+        'name',
+        'ready',
+        'resurrectionUsed',
+        'roundsWon',
+        'score',
+        'seatIndex',
+        'team',
+        'uid',
+      ];
+      payload.players.forEach((seat, idx) => {
+        expect(Object.keys(seat).sort()).toEqual(expectedSeatKeys);
+        expect(seat.seatIndex).toBe(idx);
+        expect(seat.score).toBe(0);
+        expect(seat.roundsWon).toBe(0);
+        expect(seat.deck.length).toBeGreaterThan(0);
+        expect(seat.deck.length).toBeLessThanOrEqual(60);
+      });
+
       expect(payload.players[0].uid).toBe('Zze89CHTwkalGxP71jbSuU9AL8E3');
-      expect(payload.players[0].score).toBe(0);
       for (let i = 1; i < maxPlayers; i += 1) {
         expect(payload.players[i].uid).toBeNull();
       }

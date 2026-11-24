@@ -47,18 +47,33 @@
           "type": "integer",
           "description": "Deterministic Mulberry32 PRNG seed for deck shuffling, realm rotation, and leader choice."
         },
+        "matchPreset": {
+          "type": "string",
+          "description": "Match length and scoring preset.",
+          "enum": ["blitz", "standard", "classic"]
+        },
+        "gameMode": {
+          "type": "string",
+          "description": "Scoring win condition: trophy points or classic deck capture.",
+          "enum": ["points", "classic"]
+        },
         "round": {
           "type": "integer",
           "description": "Current 1-indexed round number."
         },
         "maxRounds": {
           "type": "integer",
-          "description": "Round cap (default 60) after which card counts decide the winner."
+          "description": "Round cap (12 Blitz, 15 Standard, or 60 Classic) after which scores or card counts decide the winner."
         },
         "teamMode": {
           "type": "string",
           "description": "Free-for-all or 2v2 teams mode (4 players).",
           "enum": ["ffa", "teams"]
+        },
+        "roundPhase": {
+          "type": "string",
+          "description": "Current phase within a round: attack stat call or defend card selection.",
+          "enum": ["attack", "defend"]
         },
         "activeTurnIndex": {
           "type": "integer",
@@ -66,16 +81,20 @@
         },
         "activeRealm": {
           "type": "string",
-          "description": "Active mythological realm granting +15 bonus to matching domains.",
+          "description": "Active mythological realm granting realm bonuses and special mechanics.",
           "enum": ["SKY", "NETHER", "SEA", "WAR"]
         },
         "players": {
           "type": "array",
-          "description": "Ordered seat roster (2-4 seats) holding decks, UID, ready/away status, team, and passive flags."
+          "description": "Ordered seat roster (2-4 seats) holding decks, score, UID, ready/away status, team, and passive flags."
         },
         "warPot": {
           "type": "array",
           "description": "Card IDs held in the tie pot for the next round winner."
+        },
+        "pendingClash": {
+          "type": "object",
+          "description": "In-progress round selections during the defend phase, or null."
         },
         "gambitArmed": {
           "type": "boolean",
@@ -100,7 +119,7 @@
         },
         "lastOutcome": {
           "type": "object",
-          "description": "Summary of the most recently resolved clash round."
+          "description": "Summary of the most recently resolved clash round including pointsAwarded."
         },
         "turnStartedAt": {
           "type": "string",
@@ -127,9 +146,12 @@
         "fillWithBots",
         "activePlayers",
         "matchSeed",
+        "matchPreset",
+        "gameMode",
         "round",
         "maxRounds",
         "teamMode",
+        "roundPhase",
         "activeTurnIndex",
         "activeRealm",
         "players",
