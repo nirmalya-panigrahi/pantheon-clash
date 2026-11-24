@@ -219,7 +219,6 @@ service cloud.firestore {
         || (incoming().players[i] == existing().players[i])
         || (
           existing().players[i].uid == null
-          && existing().players[i].isBot == false
           && incoming().players[i].uid == request.auth.uid
           && incoming().players[i].isBot == false
           && incoming().players[i].away == false
@@ -415,17 +414,7 @@ service cloud.firestore {
         && isValidId(matchId)
         && isValidMatch(incoming())
         && incoming().matchId == matchId
-        && incoming().status == 'waiting'
         && incoming().hostUid == request.auth.uid
-        && incoming().players[0].uid == request.auth.uid
-        && incoming().players[1].uid == null
-        && (incoming().players.size() < 3 || incoming().players[2].uid == null)
-        && (incoming().players.size() < 4 || incoming().players[3].uid == null)
-        && incoming().activePlayers.size() == 1
-        && incoming().activePlayers[0] == request.auth.uid
-        && incoming().round == 1
-        && incoming().winner == 'NONE'
-        && incoming().turnStartedAt == request.time
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
 
