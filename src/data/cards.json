@@ -22,7 +22,7 @@
     "name": "Hades",
     "pantheon": "Greek",
     "tier": 3,
-    "domain": "UNDERWORLD",
+    "domain": "NETHER",
     "passive": "RESURRECTION",
     "stats": { "might": 78, "arcana": 89, "cunning": 76, "influence": 80 }
   },
@@ -112,7 +112,7 @@
     "name": "Hel",
     "pantheon": "Norse",
     "tier": 2,
-    "domain": "UNDERWORLD",
+    "domain": "NETHER",
     "passive": "RESURRECTION",
     "stats": { "might": 70, "arcana": 88, "cunning": 79, "influence": 74 }
   },
@@ -121,7 +121,7 @@
     "name": "Loki",
     "pantheon": "Norse",
     "tier": 2,
-    "domain": "UNDERWORLD",
+    "domain": "NETHER",
     "passive": "PROPHECY",
     "stats": { "might": 60, "arcana": 83, "cunning": 98, "influence": 68 }
   },
@@ -202,7 +202,7 @@
     "name": "Yama",
     "pantheon": "Hindu",
     "tier": 3,
-    "domain": "UNDERWORLD",
+    "domain": "NETHER",
     "passive": "RESURRECTION",
     "stats": { "might": 81, "arcana": 90, "cunning": 82, "influence": 87 }
   },
@@ -265,7 +265,7 @@
     "name": "Chitragupta",
     "pantheon": "Hindu",
     "tier": 1,
-    "domain": "UNDERWORLD",
+    "domain": "NETHER",
     "passive": "NONE",
     "stats": { "might": 46, "arcana": 79, "cunning": 94, "influence": 73 }
   },
@@ -283,7 +283,7 @@
     "name": "Osiris",
     "pantheon": "Egyptian",
     "tier": 3,
-    "domain": "UNDERWORLD",
+    "domain": "NETHER",
     "passive": "RESURRECTION",
     "stats": { "might": 75, "arcana": 91, "cunning": 77, "influence": 91 }
   },
@@ -301,7 +301,7 @@
     "name": "Anubis",
     "pantheon": "Egyptian",
     "tier": 2,
-    "domain": "UNDERWORLD",
+    "domain": "NETHER",
     "passive": "RESURRECTION",
     "stats": { "might": 76, "arcana": 86, "cunning": 83, "influence": 82 }
   },
@@ -319,7 +319,7 @@
     "name": "Isis",
     "pantheon": "Egyptian",
     "tier": 2,
-    "domain": "UNDERWORLD",
+    "domain": "NETHER",
     "passive": "RESURRECTION",
     "stats": { "might": 58, "arcana": 95, "cunning": 91, "influence": 89 }
   },
@@ -355,7 +355,7 @@
     "name": "Apophis",
     "pantheon": "Egyptian",
     "tier": 1,
-    "domain": "UNDERWORLD",
+    "domain": "NETHER",
     "passive": "NONE",
     "stats": { "might": 94, "arcana": 84, "cunning": 55, "influence": 50 }
   },
@@ -400,7 +400,7 @@
     "name": "Izanami",
     "pantheon": "Japanese",
     "tier": 2,
-    "domain": "UNDERWORLD",
+    "domain": "NETHER",
     "passive": "RESURRECTION",
     "stats": { "might": 73, "arcana": 90, "cunning": 71, "influence": 82 }
   },
@@ -445,7 +445,7 @@
     "name": "Shuten-doji",
     "pantheon": "Japanese",
     "tier": 1,
-    "domain": "UNDERWORLD",
+    "domain": "NETHER",
     "passive": "NONE",
     "stats": { "might": 92, "arcana": 68, "cunning": 67, "influence": 62 }
   },
@@ -508,7 +508,7 @@
     "name": "Tezcatlipoca",
     "pantheon": "Mesoamerican",
     "tier": 3,
-    "domain": "UNDERWORLD",
+    "domain": "NETHER",
     "passive": "PROPHECY",
     "stats": { "might": 86, "arcana": 93, "cunning": 96, "influence": 89 }
   },
@@ -535,7 +535,7 @@
     "name": "Mictlantecuhtli",
     "pantheon": "Mesoamerican",
     "tier": 1,
-    "domain": "UNDERWORLD",
+    "domain": "NETHER",
     "passive": "RESURRECTION",
     "stats": { "might": 83, "arcana": 87, "cunning": 70, "influence": 79 }
   }

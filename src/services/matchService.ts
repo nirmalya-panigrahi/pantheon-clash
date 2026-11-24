@@ -31,7 +31,7 @@ const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 function requireDb(): Firestore {
   if (!db) {
-    throw new Error('Online multiplayer is disabled because no Firebase API key is configured.');
+    throw new Error('Online rooms are unavailable in this build.');
   }
   return db;
 }

@@ -95,7 +95,7 @@ export const PANTHEON_THEMES: Record<Pantheon, PantheonTheme> = {
 export interface RealmTheme {
   label: string;
   description: string;
-  badgeTone: 'sky' | 'underworld' | 'sea' | 'war';
+  badgeTone: 'sky' | 'nether' | 'sea' | 'war';
   bannerClass: string;
   textClass: string;
 }
@@ -108,10 +108,10 @@ export const REALM_THEMES: Record<Realm, RealmTheme> = {
     bannerClass: 'border-amber-400/40 bg-amber-500/12',
     textClass: 'text-amber-300',
   },
-  UNDERWORLD: {
-    label: 'Underworld',
-    description: '+15 to all stats for Underworld deities',
-    badgeTone: 'underworld',
+  NETHER: {
+    label: 'Nether',
+    description: '+15 to all stats for Nether deities',
+    badgeTone: 'nether',
     bannerClass: 'border-violet-400/40 bg-violet-500/12',
     textClass: 'text-violet-300',
   },

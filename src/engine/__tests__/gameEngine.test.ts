@@ -160,7 +160,7 @@ describe('gameEngine deterministic 2-4 player mechanics', () => {
   it('Blue Pill: RESURRECTION returns losing card to bottom of owner deck once per match', () => {
     const initial = buildCustomState({
       activeTurnIndex: 0,
-      activeRealm: 'UNDERWORLD',
+      activeRealm: 'NETHER',
       players: [
         makePlayer(0, { deck: ['hades', 'poseidon'] }), // hades RESURRECTION might 78
         makePlayer(1, { deck: ['thor', 'odin'] }), // thor PIERCING might 97
@@ -183,7 +183,7 @@ describe('gameEngine deterministic 2-4 player mechanics', () => {
   it('Blue Pill: Gambit inverts comparison across all players so lowest effective stat wins', () => {
     const initial = buildCustomState({
       activeTurnIndex: 0,
-      activeRealm: 'UNDERWORLD',
+      activeRealm: 'NETHER',
       players: [
         makePlayer(0, { deck: ['odysseus', 'zeus'] }), // might 67
         makePlayer(1, { deck: ['thor', 'odin'] }), // might 97

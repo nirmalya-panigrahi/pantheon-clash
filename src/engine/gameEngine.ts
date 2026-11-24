@@ -19,7 +19,7 @@ import type {
 } from '../types/game';
 import { deriveSeed, mulberry32, normalizeSeed, shuffleDeterministic } from './prng';
 
-export const REALMS: readonly Realm[] = ['SKY', 'UNDERWORLD', 'SEA', 'WAR'];
+export const REALMS: readonly Realm[] = ['SKY', 'NETHER', 'SEA', 'WAR'];
 export const STAT_KEYS: readonly StatKey[] = ['might', 'arcana', 'cunning', 'influence'];
 export const SEAT_IDS: readonly SeatId[] = ['p1', 'p2', 'p3', 'p4'];
 export const REALM_BONUS = 15;

@@ -7,7 +7,7 @@ export type Pantheon =
   | 'Celtic'
   | 'Mesoamerican';
 
-export type Realm = 'SKY' | 'UNDERWORLD' | 'SEA' | 'WAR';
+export type Realm = 'SKY' | 'NETHER' | 'SEA' | 'WAR';
 
 export type Passive = 'NONE' | 'PIERCING' | 'PROPHECY' | 'RESURRECTION';
 

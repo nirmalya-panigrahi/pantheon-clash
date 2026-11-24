@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react';
 import { Crown, Eye, Flame, Sparkles, Swords } from 'lucide-react';
+import { getDeityImageUrl } from '../data/deityImages';
 import { PANTHEON_THEMES } from '../theme/pantheons';
-import type { Pantheon, Passive, Realm, StatKey } from '../types/game';
+import type { MythCard, Pantheon, Passive, Realm, StatKey } from '../types/game';
 
 export function RealmIcon({
   realm,
@@ -22,7 +24,7 @@ export function RealmIcon({
       </svg>
     );
   }
-  if (realm === 'UNDERWORLD') {
+  if (realm === 'NETHER') {
     return (
       <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
         <path
@@ -191,12 +193,41 @@ export function PantheonCrest({
   );
 }
 
+export function DeityArt({
+  card,
+  size = 'md',
+}: {
+  card: MythCard;
+  size?: 'sm' | 'md' | 'lg';
+}) {
+  const [imgError, setImgError] = useState(false);
+  const src = getDeityImageUrl(card.id);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [card.id]);
+
+  if (!src || imgError) {
+    return <PantheonCrest pantheon={card.pantheon} domain={card.domain} size={size} />;
+  }
+
+  return (
+    <img
+      src={src}
+      alt={`${card.name} artwork`}
+      loading="lazy"
+      onError={() => setImgError(true)}
+      className="max-h-full max-w-full w-auto h-auto object-contain bg-transparent select-none pointer-events-none"
+    />
+  );
+}
+
 export function getRealmLabel(realm: Realm): string {
   switch (realm) {
     case 'SKY':
       return 'Sky';
-    case 'UNDERWORLD':
-      return 'Underworld';
+    case 'NETHER':
+      return 'Nether';
     case 'SEA':
       return 'Sea';
     case 'WAR':

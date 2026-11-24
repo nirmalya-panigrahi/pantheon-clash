@@ -1,19 +1,9 @@
-import { STAT_KEYS } from '../engine/gameEngine';
-import {
-  PANTHEON_THEMES,
-  PASSIVE_META,
-  REALM_THEMES,
-  STAT_META,
-} from '../theme/pantheons';
+import { DEITY_NUMBER_BY_ID } from '../data/deityImages';
+import { REALM_BONUS, STAT_KEYS } from '../engine/gameEngine';
+import { PANTHEON_THEMES, PASSIVE_META, STAT_META } from '../theme/pantheons';
 import type { MythCard, ProphecyHint, Realm, StatKey } from '../types/game';
-import {
-  getRealmLabel,
-  PantheonCrest,
-  PassiveIcon,
-  RealmIcon,
-  StatIcon,
-} from './MythEmblem';
-import { Badge, Tooltip } from './ui';
+import { DeityArt, getRealmLabel, RealmIcon, StatIcon } from './MythEmblem';
+import { Tooltip } from './ui';
 
 export interface CardProps {
   card: MythCard;
@@ -59,229 +49,301 @@ export function Card({
       <article
         aria-label={`${ownerLabel ?? 'Opponent'} hidden card`}
         className={`w-full ${
-          compact ? 'max-w-[200px] min-h-[260px] p-3' : 'max-w-[300px] aspect-[5/7] p-4'
-        } mx-auto rounded-2xl bg-[#111728] border border-amber-500/35 shadow-[0_12px_32px_rgba(0,0,0,0.55)] flex flex-col justify-between select-none`}
+          compact ? 'max-w-[220px]' : 'max-w-[330px]'
+        } aspect-[5/7] mx-auto p-[6px] rounded-[18px] gold-glitter-frame shadow-[0_14px_34px_rgba(0,0,0,0.65)] select-none`}
       >
-        <div className="flex items-center justify-between text-[11px] text-stone-400">
-          <span className="truncate font-medium">{ownerLabel ?? 'Opponent'}</span>
-          <span className="font-mono text-amber-400/80">Hidden</span>
-        </div>
-
-        <div className="my-2 flex-1 rounded-xl border border-amber-400/20 bg-gradient-to-b from-[#161E34] via-[#101627] to-[#161E34] p-3 flex flex-col items-center justify-center text-center gap-2.5 relative overflow-hidden">
-          <div className="w-12 h-12 rounded-full border border-amber-400/35 bg-amber-500/10 flex items-center justify-center text-amber-300">
-            <svg viewBox="0 0 40 40" fill="none" className="w-7 h-7" aria-hidden="true">
-              <polygon
-                points="20,4 34,20 20,36 6,20"
-                stroke="currentColor"
-                strokeWidth="1.6"
-              />
-              <circle cx="20" cy="20" r="4" fill="currentColor" />
-            </svg>
+        <div className="h-full w-full rounded-[12px] bg-[#0b0b0c] p-3.5 flex flex-col justify-between relative overflow-hidden">
+          <div className="flex items-center justify-between text-[10px] font-condensed uppercase tracking-widest text-[#b8892b] border-b border-[#b8892b]/35 pb-1.5">
+            <span className="truncate">{ownerLabel ?? 'Opponent'}</span>
+            <span>Veiled</span>
           </div>
-          <p className="font-display text-sm font-semibold text-stone-200 tracking-wide">
-            Veiled Deity
-          </p>
 
-          {prophecyHint && (
-            <div
-              data-testid="prophecy-reveal"
-              className="w-full rounded-lg border border-amber-400/50 bg-amber-500/15 px-2.5 py-2 text-left"
-            >
-              <div className="flex items-center justify-between text-[11px] font-semibold text-amber-200">
-                <span className="inline-flex items-center gap-1">
-                  <PassiveIcon passive="PROPHECY" className="w-3 h-3" />
-                  Prophecy
-                </span>
-                <span>{STAT_META[prophecyHint.stat].label}</span>
-              </div>
-              <div className="mt-1 flex items-baseline justify-between">
-                <span className="text-[11px] text-stone-300">Effective</span>
-                <span className="font-mono tabular-nums text-base font-bold text-amber-200">
-                  {prophecyHint.effectiveValue}
-                </span>
-              </div>
+          <div className="my-2 flex-1 rounded-lg border border-[#b8892b]/45 bg-[#050506] p-3 flex flex-col items-center justify-center text-center gap-3 relative overflow-hidden">
+            <div className="w-12 h-12 rounded-full border border-[#f0d27a]/45 bg-[#161207] flex items-center justify-center text-[#f0d27a]">
+              <svg viewBox="0 0 40 40" fill="none" className="w-7 h-7" aria-hidden="true">
+                <polygon
+                  points="20,4 34,20 20,36 6,20"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  fill="currentColor"
+                  fillOpacity="0.12"
+                />
+                <circle cx="20" cy="20" r="3.5" fill="currentColor" />
+              </svg>
             </div>
-          )}
-        </div>
+            <p className="font-display text-xs uppercase tracking-[0.2em] text-[#f0d27a]">
+              Pantheon Clash
+            </p>
 
-        <div className="text-[11px] text-stone-500 text-center font-medium">
-          Pantheon Clash
+            {prophecyHint && (
+              <div
+                data-testid="prophecy-reveal"
+                className="w-full rounded-lg border border-[#f0d27a]/60 bg-[#151107] px-2.5 py-2 text-left"
+              >
+                <div className="flex items-center justify-between text-[10px] font-condensed uppercase tracking-wider text-[#f0d27a]">
+                  <span>Prophecy</span>
+                  <span>{STAT_META[prophecyHint.stat].label}</span>
+                </div>
+                <div className="mt-0.5 flex items-baseline justify-between">
+                  <span className="text-[11px] text-[#b8892b]">Revealed</span>
+                  <span className="font-display tabular-nums text-base font-bold text-[#f0d27a]">
+                    {prophecyHint.effectiveValue}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="text-[10px] font-condensed uppercase tracking-[0.2em] text-[#b8892b] text-center border-t border-[#b8892b]/35 pt-1.5">
+            Gold Idol Edition
+          </div>
         </div>
       </article>
     );
   }
 
   const pTheme = PANTHEON_THEMES[card.pantheon];
-  const rTheme = REALM_THEMES[card.domain];
   const passiveInfo = PASSIVE_META[card.passive];
   const tierStars = '★'.repeat(card.tier);
+  const cardNumber = DEITY_NUMBER_BY_ID[card.id] ?? '00/60';
   const realmMatches = activeRealm === card.domain;
   const activeStatHighlight = selectedStat ?? highlightedStat;
 
-  const outcomeClasses =
+  const outcomeOuterClass =
     outcomeState === 'winner'
-      ? 'ring-2 ring-amber-400 shadow-[0_0_32px_rgba(251,191,36,0.45)] border-amber-300'
+      ? 'ring-2 ring-[#f5d77a] shadow-[0_0_32px_rgba(245,215,122,0.5)]'
       : outcomeState === 'loser'
-        ? 'grayscale opacity-70 border-stone-500/50'
-        : `${pTheme.borderClass} ${pTheme.glowShadow}`;
+        ? 'grayscale opacity-65 shadow-lg'
+        : 'shadow-[0_14px_34px_rgba(0,0,0,0.65)]';
 
   const hoverClasses =
     interactive || onClickCard
-      ? 'hover:-translate-y-1.5 md:hover:rotate-[0.6deg] transition-transform duration-200'
+      ? 'hover:-translate-y-1.5 md:hover:rotate-[0.5deg] transition-transform duration-200'
       : 'transition-all duration-200';
 
-  const cardContent = (
+  const bonusBoxValue = bonusNegated
+    ? 'Pierced'
+    : realmBonus > 0
+      ? `+${realmBonus}`
+      : realmMatches
+        ? `+${REALM_BONUS}`
+        : '—';
+
+  return (
     <article
       aria-label={`${card.name} card`}
       onClick={onClickCard}
       className={`w-full ${
-        compact ? 'max-w-[230px] p-3' : 'max-w-[310px] aspect-[5/7] p-4'
-      } mx-auto rounded-2xl bg-[#F6F0E2] text-stone-900 border-2 flex flex-col justify-between ${outcomeClasses} ${hoverClasses} ${
+        compact ? 'max-w-[232px]' : 'max-w-[330px]'
+      } aspect-[5/7] mx-auto p-[6px] rounded-[18px] gold-glitter-frame ${outcomeOuterClass} ${hoverClasses} ${
         onClickCard ? 'cursor-pointer' : ''
       }`}
     >
-      {/* Top Banner */}
-      <div className="space-y-2">
-        <div
-          className={`rounded-xl bg-gradient-to-r ${pTheme.headerGradient} px-3 py-2 text-stone-100 border border-white/10`}
-        >
-          <div className="flex items-center justify-between gap-2 text-[11px]">
-            <span className={`font-semibold tracking-wide ${pTheme.badgeText} truncate`}>
-              {ownerLabel ? `${ownerLabel} · ${card.pantheon}` : card.pantheon}
-            </span>
+      <div className="h-full w-full rounded-[12px] bg-[#0b0b0c] text-[#f5f0e4] px-2.5 py-2 flex flex-col justify-between gap-1 overflow-hidden">
+        {/* Header */}
+        <header className="flex items-center justify-between gap-2 border-b border-[#b8892b]/50 pb-1 shrink-0">
+          <h3 className="font-display text-sm sm:text-[15px] font-bold uppercase tracking-[0.09em] text-[#f0d27a] truncate leading-tight">
+            {card.name}
+          </h3>
+          <div className="flex items-center gap-1.5 shrink-0">
             <span
-              className="font-mono tabular-nums text-amber-300 shrink-0"
+              className="font-display text-[11px] text-[#f0d27a] tracking-tight"
               aria-label={`Tier ${card.tier}`}
             >
               {tierStars}
             </span>
-          </div>
-          <h3 className="font-display text-lg font-bold text-white leading-tight truncate mt-0.5">
-            {card.name}
-          </h3>
-        </div>
-
-        {/* Art & Domain / Passive Strip */}
-        <div
-          className={`rounded-xl bg-gradient-to-br ${pTheme.artGradient} border border-stone-900/10 p-2 relative overflow-hidden`}
-        >
-          <PantheonCrest
-            pantheon={card.pantheon}
-            domain={card.domain}
-            size={compact ? 'sm' : 'md'}
-          />
-          <div className="mt-1.5 flex items-center justify-between gap-1.5 flex-wrap">
-            <Badge tone={rTheme.badgeTone}>
-              <RealmIcon realm={card.domain} className="w-3 h-3" />
-              {getRealmLabel(card.domain)}
-            </Badge>
-
-            {card.passive !== 'NONE' && (
-              <Tooltip content={passiveInfo.tooltip}>
-                <Badge tone="gold" className="!bg-stone-900 !text-amber-300 !border-amber-500/50">
-                  <PassiveIcon passive={card.passive} className="w-3 h-3" />
-                  {passiveInfo.label}
-                </Badge>
-              </Tooltip>
-            )}
-          </div>
-        </div>
-
-        {realmMatches && (
-          <div className="flex items-center justify-between text-[11px] px-1">
-            <span className="font-semibold text-stone-700">
-              {getRealmLabel(card.domain)} Realm Bonus
-            </span>
             <span
-              className={`font-mono tabular-nums font-bold ${
-                bonusNegated ? 'text-rose-700 line-through' : 'text-emerald-700'
-              }`}
+              title={`${getRealmLabel(card.domain)} Domain`}
+              className="w-5 h-5 rounded-full border border-[#f0d27a]/80 bg-[#1a1407] text-[#f0d27a] flex items-center justify-center shrink-0"
             >
-              {bonusNegated ? 'Pierced (0)' : `+${realmBonus}`}
+              <RealmIcon realm={card.domain} className="w-3 h-3" />
             </span>
+          </div>
+        </header>
+
+        {/* Art Panel */}
+        <div
+          className={`relative w-full ${
+            compact ? 'aspect-[2/1]' : 'aspect-[2/1]'
+          } rounded-lg border border-[#b8892b]/65 bg-[#050506] overflow-hidden flex items-center justify-center px-4 py-1 shrink-0`}
+        >
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              backgroundImage: `radial-gradient(circle at 50% 50%, ${pTheme.accentHex}33 0%, rgba(5,5,6,0.18) 55%, rgba(5,5,6,0.88) 100%)`,
+            }}
+          />
+          <div className="relative z-10 w-full h-full flex items-center justify-center">
+            <DeityArt card={card} size={compact ? 'sm' : 'md'} />
+          </div>
+          <span className="absolute left-1.5 bottom-1 z-20 font-display italic text-[10px] text-[#f0d27a]/90 pointer-events-none">
+            {card.pantheon}
+          </span>
+          <span
+            aria-hidden="true"
+            className="absolute right-1 top-1/2 -translate-y-1/2 z-20 [writing-mode:vertical-rl] rotate-180 font-condensed text-[8px] uppercase tracking-[0.2em] text-[#b8892b]/85 pointer-events-none"
+          >
+            {card.pantheon}
+          </span>
+        </div>
+
+        {/* Info Strip (Full Card Only) */}
+        {!compact && (
+          <div className="flex items-center justify-between gap-1 px-1 py-0.5 font-condensed text-[10px] uppercase tracking-wider text-[#b8892b] border-b border-[#b8892b]/35 shrink-0">
+            <span className="truncate">{card.pantheon}</span>
+            <span aria-hidden="true" className="text-[#b8892b]/50">|</span>
+            <span className="truncate">{getRealmLabel(card.domain)}</span>
+            <span aria-hidden="true" className="text-[#b8892b]/50">|</span>
+            <span className="truncate">
+              {card.passive === 'NONE' ? 'Standard' : passiveInfo.label}
+            </span>
+            <span aria-hidden="true" className="text-[#b8892b]/50">|</span>
+            <span className="tabular-nums text-[#f0d27a] shrink-0">No. {cardNumber}</span>
           </div>
         )}
-      </div>
 
-      {/* Four Stat Rows */}
-      <div className="mt-2 space-y-1.5" role="group" aria-label={`${card.name} stats`}>
-        {STAT_KEYS.map((stat) => {
-          const base = card.stats[stat];
-          const targetEffective = base + realmBonus;
-          const displayEffective =
-            countUpProgress < 1
-              ? Math.round(base + (targetEffective - base) * countUpProgress)
-              : targetEffective;
-          const isSelected = activeStatHighlight === stat;
+        {/* Four Stat Rows */}
+        <div
+          className="divide-y divide-[#b8892b]/30 border-b border-[#b8892b]/40 flex-1 flex flex-col justify-center"
+          role="group"
+          aria-label={`${card.name} stats`}
+        >
+          {STAT_KEYS.map((stat) => {
+            const base = card.stats[stat];
+            const targetEffective = base + realmBonus;
+            const displayEffective =
+              countUpProgress < 1
+                ? Math.round(base + (targetEffective - base) * countUpProgress)
+                : targetEffective;
+            const isSelected = activeStatHighlight === stat;
 
-          if (interactive) {
+            const rowHighlight = isSelected
+              ? 'bg-[#f0d27a]/15 shadow-[inset_0_0_12px_rgba(240,210,122,0.2)]'
+              : gambitArmed && interactive
+                ? 'bg-[#f0d27a]/10 hover:bg-[#f0d27a]/20'
+                : interactive
+                  ? 'hover:bg-[#f0d27a]/10'
+                  : '';
+
+            if (interactive) {
+              return (
+                <button
+                  key={stat}
+                  type="button"
+                  disabled={disabled}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectStat?.(stat);
+                  }}
+                  className={`w-full min-h-[44px] px-2 flex items-center justify-between gap-2 text-left transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#f5d77a] disabled:opacity-45 disabled:cursor-not-allowed ${rowHighlight}`}
+                >
+                  <span className="font-display text-xs sm:text-sm text-[#f5f0e4] inline-flex items-center gap-1.5 whitespace-nowrap">
+                    <StatIcon stat={stat} className="w-3.5 h-3.5 text-[#f0d27a]" />
+                    <span>{STAT_META[stat].label}</span>
+                    {gambitArmed && (
+                      <span className="font-condensed text-[10px] uppercase tracking-wider text-[#f5d77a]">
+                        (Low)
+                      </span>
+                    )}
+                  </span>
+                  <span className="font-display tabular-nums text-base sm:text-lg font-bold text-[#f0d27a] inline-flex items-baseline gap-1 shrink-0">
+                    {bonusNegated ? (
+                      <span className="text-[11px] font-normal text-[#b8892b] line-through opacity-45">
+                        +{REALM_BONUS}
+                      </span>
+                    ) : realmBonus > 0 ? (
+                      <span className="text-[11px] font-semibold text-[#f5d77a]">
+                        +{realmBonus}
+                      </span>
+                    ) : null}
+                    <span>{displayEffective}</span>
+                  </span>
+                </button>
+              );
+            }
+
             return (
-              <button
+              <div
                 key={stat}
-                type="button"
-                disabled={disabled}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSelectStat?.(stat);
-                }}
-                className={`w-full min-h-[44px] px-3 py-1.5 rounded-xl border text-left flex items-center justify-between gap-2 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 disabled:opacity-50 disabled:cursor-not-allowed ${
-                  isSelected
-                    ? 'border-amber-600 bg-amber-200/80 text-stone-950'
-                    : gambitArmed
-                      ? 'border-amber-600/60 bg-amber-50 hover:bg-amber-100 text-stone-950'
-                      : 'border-stone-300 bg-white/95 hover:bg-stone-100 hover:border-stone-400 text-stone-950'
-                }`}
+                className={`w-full ${
+                  compact ? 'min-h-[26px] px-1.5 py-0.5' : 'min-h-[30px] px-2 py-0.5'
+                } flex items-center justify-between gap-2 ${rowHighlight}`}
               >
-                <span className="text-xs sm:text-sm font-semibold inline-flex items-center gap-2 whitespace-nowrap">
-                  <StatIcon stat={stat} className="w-3.5 h-3.5 text-stone-600" />
+                <span className="font-display text-[11px] sm:text-xs text-[#f5f0e4] inline-flex items-center gap-1.5 whitespace-nowrap">
+                  <StatIcon stat={stat} className="w-3 h-3 text-[#f0d27a]" />
                   <span>{STAT_META[stat].label}</span>
-                  {gambitArmed && (
-                    <span className="text-[11px] font-semibold text-amber-800">
-                      (Low)
-                    </span>
-                  )}
                 </span>
-                <span className="font-mono tabular-nums text-sm sm:text-base font-bold inline-flex items-baseline gap-1.5 shrink-0">
-                  {realmBonus > 0 && (
-                    <span className="text-[11px] font-bold text-emerald-700">
+                <span
+                  className={`font-display tabular-nums ${
+                    compact ? 'text-sm' : 'text-base sm:text-lg'
+                  } font-bold text-[#f0d27a] inline-flex items-baseline gap-1 shrink-0`}
+                >
+                  {bonusNegated ? (
+                    <span className="text-[10px] font-normal text-[#b8892b] line-through opacity-45">
+                      +{REALM_BONUS}
+                    </span>
+                  ) : realmBonus > 0 ? (
+                    <span className="text-[10px] font-semibold text-[#f5d77a]">
                       +{realmBonus}
                     </span>
-                  )}
+                  ) : null}
                   <span>{displayEffective}</span>
                 </span>
-              </button>
+              </div>
             );
-          }
+          })}
+        </div>
 
-          return (
-            <div
-              key={stat}
-              className={`w-full ${
-                compact ? 'min-h-[30px] px-2.5 py-1' : 'min-h-[38px] px-3 py-1.5'
-              } rounded-xl border flex items-center justify-between gap-2 ${
-                isSelected
-                  ? 'border-amber-600 bg-amber-100 text-stone-950 font-semibold'
-                  : 'border-stone-300/80 bg-white/80 text-stone-800'
-              }`}
-            >
-              <span className="text-xs sm:text-sm font-medium inline-flex items-center gap-2 whitespace-nowrap">
-                <StatIcon stat={stat} className="w-3.5 h-3.5 text-stone-600" />
-                <span>{STAT_META[stat].label}</span>
-              </span>
-              <span className="font-mono tabular-nums text-sm sm:text-base font-bold inline-flex items-baseline gap-1.5 shrink-0">
-                {realmBonus > 0 && (
-                  <span className="text-[11px] font-bold text-emerald-700">
-                    +{realmBonus}
-                  </span>
-                )}
-                <span>{displayEffective}</span>
-              </span>
+        {/* Bottom 3 Gold Boxes (Full Card Only) */}
+        {!compact && (
+          <div className="grid grid-cols-3 gap-1.5 pt-0.5 shrink-0">
+            <div className="rounded border border-[#b8892b]/55 bg-[#12100a] px-1.5 py-1 text-center">
+              <p className="font-condensed text-[8px] uppercase tracking-widest text-[#b8892b]">
+                Realm
+              </p>
+              <p className="font-condensed text-[11px] font-semibold text-[#f0d27a] truncate">
+                {getRealmLabel(card.domain)}
+              </p>
             </div>
-          );
-        })}
+
+            <div className="rounded border border-[#b8892b]/55 bg-[#12100a] px-1.5 py-1 text-center flex flex-col items-center justify-center">
+              <p className="font-condensed text-[8px] uppercase tracking-widest text-[#b8892b]">
+                Passive
+              </p>
+              {card.passive === 'NONE' ? (
+                <p className="font-condensed text-[11px] font-semibold text-[#f0d27a]">—</p>
+              ) : (
+                <Tooltip content={passiveInfo.tooltip}>
+                  <span className="font-condensed text-[11px] font-semibold text-[#f0d27a] underline decoration-[#b8892b]/60 decoration-dotted">
+                    {passiveInfo.label}
+                  </span>
+                </Tooltip>
+              )}
+            </div>
+
+            <div className="rounded border border-[#b8892b]/55 bg-[#12100a] px-1.5 py-1 text-center">
+              <p className="font-condensed text-[8px] uppercase tracking-widest text-[#b8892b]">
+                Bonus
+              </p>
+              <p
+                className={`font-condensed text-[11px] font-semibold truncate ${
+                  bonusNegated ? 'text-[#b8892b]/65 line-through' : 'text-[#f0d27a]'
+                }`}
+              >
+                {bonusBoxValue}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Footer (Full Card Only) */}
+        {!compact && (
+          <footer className="text-center font-condensed text-[9px] uppercase tracking-[0.16em] text-[#b8892b] pt-0.5 shrink-0">
+            Pantheon Clash · No. {cardNumber} · {tierStars}
+          </footer>
+        )}
       </div>
     </article>
   );
-
-  return cardContent;
 }

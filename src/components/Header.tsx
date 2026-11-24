@@ -1,4 +1,4 @@
-import { BookOpen, Settings, Sparkles } from 'lucide-react';
+import { BookOpen, Settings } from 'lucide-react';
 import { Button } from './ui';
 
 export type AppScreen = 'lobby' | 'arena' | 'codex';
@@ -35,16 +35,13 @@ export function Header({
   ];
 
   return (
-    <header className="sticky top-0 z-40 border-b border-white/10 bg-[#0B0E17]/90 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-white/20 bg-white/10 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.35)]">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-6">
         <button
           type="button"
           onClick={() => onNavigate('lobby')}
-          className="inline-flex items-center gap-2 font-display text-base sm:text-xl font-bold tracking-tight text-stone-100 hover:text-amber-300 transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 rounded-md"
+          className="inline-flex items-center gap-2 font-display text-base sm:text-xl font-bold tracking-tight text-white hover:text-amber-200 transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 rounded-md"
         >
-          <span className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-400/40 flex items-center justify-center text-amber-300 shrink-0">
-            <Sparkles className="w-4 h-4" aria-hidden="true" />
-          </span>
           <span>Pantheon Clash</span>
         </button>
 
@@ -56,10 +53,10 @@ export function Header({
                 key={item.id}
                 type="button"
                 onClick={() => onNavigate(item.id)}
-                className={`py-2 px-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer border-b-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 ${
+                className={`py-2 px-1 whitespace-nowrap shrink-0 transition-colors cursor-pointer border-b-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 ${
                   active
-                    ? 'border-amber-400 text-amber-300'
-                    : 'border-transparent text-stone-300 hover:text-stone-100'
+                    ? 'border-amber-300 text-amber-200'
+                    : 'border-transparent text-white/80 hover:text-white'
                 }`}
               >
                 {item.label}
@@ -76,8 +73,8 @@ export function Header({
             aria-label="How to Play"
             className="px-2 sm:px-3"
           >
-            <BookOpen className="w-4 h-4 text-amber-300" aria-hidden="true" />
-            <span className="hidden md:inline">How to Play</span>
+            <BookOpen className="w-4 h-4 text-amber-200" aria-hidden="true" />
+            <span className="hidden md:inline">Rules</span>
           </Button>
 
           <Button
@@ -87,7 +84,7 @@ export function Header({
             aria-label="Open settings"
             className="px-2 sm:px-3"
           >
-            <Settings className="w-4 h-4 text-stone-300" aria-hidden="true" />
+            <Settings className="w-4 h-4 text-white/90" aria-hidden="true" />
             <span className="hidden lg:inline">Settings</span>
           </Button>
 

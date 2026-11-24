@@ -67,7 +67,7 @@
         "activeRealm": {
           "type": "string",
           "description": "Active mythological realm granting +15 bonus to matching domains.",
-          "enum": ["SKY", "UNDERWORLD", "SEA", "WAR"]
+          "enum": ["SKY", "NETHER", "SEA", "WAR"]
         },
         "players": {
           "type": "array",

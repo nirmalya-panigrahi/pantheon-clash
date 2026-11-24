@@ -49,7 +49,7 @@ function makeLobbyDoc(overrides: Partial<FirestoreMatchDocument> = {}): Firestor
 }
 
 describe('Lobby component', () => {
-  it('Blue Pill: starts solo 4-player 2v2 match with normalized seed and handles auth buttons', async () => {
+  it('Blue Pill: starts strictly 2-player solo vs bot with normalized seed and handles auth buttons', async () => {
     const user = userEvent.setup();
     const onStartSolo = vi.fn();
     const authState = makeAuthState();
@@ -71,8 +71,8 @@ describe('Lobby component', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: '4P' }));
-    await user.click(screen.getByRole('button', { name: /2v2 teams/i }));
+    expect(screen.queryByRole('button', { name: '3P' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '4P' })).not.toBeInTheDocument();
 
     const seedInput = screen.getByLabelText(/match seed/i);
     await user.clear(seedInput);
@@ -81,8 +81,6 @@ describe('Lobby component', () => {
 
     expect(onStartSolo).toHaveBeenCalledWith({
       seed: 4242,
-      playerCount: 4,
-      teamMode: 'teams',
     });
 
     await user.click(screen.getByRole('button', { name: /sign in with google/i }));
@@ -92,7 +90,7 @@ describe('Lobby component', () => {
     expect(authState.loginAsGuest).toHaveBeenCalledTimes(1);
   });
 
-  it('Blue Pill & Red Pill: supports segmented room-code input, creating rooms, and open room joining', async () => {
+  it('Blue Pill & Red Pill: supports 2-4P online rooms, 2v2 teams, segmented room-code input, and open room joining', async () => {
     const user = userEvent.setup();
     const onJoinMultiplayer = vi.fn();
     const onCreateMultiplayer = vi.fn().mockResolvedValue(undefined);
@@ -145,13 +143,14 @@ describe('Lobby component', () => {
     await user.click(screen.getByRole('button', { name: /join match/i }));
     expect(onJoinMultiplayer).toHaveBeenCalledWith('match-other');
 
-    // Switch to Create Room & test creating 3-seat room
-    await user.click(screen.getByRole('button', { name: '3 Seats' }));
-    await user.click(screen.getByRole('button', { name: /create 3-player room/i }));
+    // Create 4-seat 2v2 room
+    await user.click(screen.getByRole('button', { name: '4 Seats' }));
+    await user.click(screen.getByRole('button', { name: /2v2 teams/i }));
+    await user.click(screen.getByRole('button', { name: /create 4-player room/i }));
     expect(onCreateMultiplayer).toHaveBeenCalledWith({
       seed: 202601,
-      maxPlayers: 3,
-      teamMode: 'ffa',
+      maxPlayers: 4,
+      teamMode: 'teams',
       fillWithBots: true,
     });
 
@@ -165,7 +164,7 @@ describe('Lobby component', () => {
     expect(onJoinMultiplayer).toHaveBeenCalledWith('K9M2P4');
   });
 
-  it('Red Pill: hides auth buttons and explains offline mode when Firebase is not configured', () => {
+  it('Red Pill: hides auth buttons and shows concise offline notice when Firebase is not configured', () => {
     const authState = makeAuthState({ isConfigured: false });
 
     render(
@@ -185,9 +184,7 @@ describe('Lobby component', () => {
       />,
     );
 
-    expect(
-      screen.getByText(/online multiplayer disabled on this static build/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/online rooms unavailable/i)).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /sign in with google/i }),
     ).not.toBeInTheDocument();

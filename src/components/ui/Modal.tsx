@@ -31,7 +31,7 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
       role="presentation"
       onClick={onClose}
     >
@@ -39,18 +39,18 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`w-full ${maxWidthClass} max-h-[90vh] overflow-y-auto rounded-2xl bg-[#131926] border border-amber-400/25 shadow-2xl p-6 space-y-5 text-stone-100`}
+        className={`w-full ${maxWidthClass} max-h-[90vh] overflow-y-auto rounded-2xl glass-panel p-6 space-y-5 text-white`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-3">
-          <h2 className="font-display text-xl font-bold text-amber-300">
+        <div className="flex items-center justify-between gap-4 border-b border-white/20 pb-3">
+          <h2 className="font-display text-xl font-bold text-amber-200">
             {title}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label={`Close ${title}`}
-            className="min-h-[40px] min-w-[40px] rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-stone-300 hover:text-white inline-flex items-center justify-center transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-amber-400"
+            className="min-h-[40px] min-w-[40px] rounded-xl border border-white/20 bg-white/10 hover:bg-white/20 text-white inline-flex items-center justify-center transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-amber-300"
           >
             <X className="w-4 h-4" />
           </button>

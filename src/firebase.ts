@@ -109,7 +109,7 @@ if (isFirebaseConfigured) {
 
 export async function signInWithGoogle(): Promise<User> {
   if (!auth) {
-    throw new Error('Online multiplayer is disabled because no Firebase API key is configured.');
+    throw new Error('Online rooms are unavailable in this build.');
   }
   const result = await signInWithPopup(auth, googleProvider);
   return result.user;
@@ -117,7 +117,7 @@ export async function signInWithGoogle(): Promise<User> {
 
 export async function signInAsGuest(): Promise<User> {
   if (!auth) {
-    throw new Error('Online multiplayer is disabled because no Firebase API key is configured.');
+    throw new Error('Online rooms are unavailable in this build.');
   }
   const result = await signInAnonymously(auth);
   return result.user;

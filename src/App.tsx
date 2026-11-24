@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Arena } from './components/Arena';
 import { Codex } from './components/Codex';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -58,8 +58,8 @@ export default function App() {
   const [initialRoomCode] = useState<string>(getInitialRoomCodeFromUrl);
   const autoJoinedRoomRef = useRef(false);
 
-  const [soloState, dispatchSolo] = useReducer(soloReducer, 202601, (seed) => ({
-    match: createInitialMatchState(seed, { playerCount: 2 }),
+  const [soloState, setSoloState] = useState<SoloHistoryState>(() => ({
+    match: createInitialMatchState(202601, { playerCount: 2 }),
     history: [],
   }));
 
@@ -93,7 +93,7 @@ export default function App() {
     }
   }, [multiplayer.match?.lastOutcome]);
 
-  // Deterministic Bot turn execution in Solo mode (supports 2-4 players).
+  // Deterministic Bot turn execution in 2-player Solo mode.
   useEffect(() => {
     if (activeMode !== 'solo' || screen !== 'arena') return;
     const { match } = soloState;
@@ -104,7 +104,7 @@ export default function App() {
     const timer = window.setTimeout(() => {
       const botAction = chooseBotAction(match);
       if (botAction) {
-        dispatchSolo(botAction);
+        setSoloState((prev) => soloReducer(prev, botAction));
       }
     }, reducedMotion ? 150 : 600);
 
@@ -114,25 +114,25 @@ export default function App() {
   const handleStartSolo = useCallback(
     (config: SoloLaunchConfig) => {
       setLobbyActionError(null);
-      const players = Array.from({ length: config.playerCount }, (_, idx) => ({
-        name:
-          idx === 0
-            ? authState.user
-              ? authState.displayName
-              : 'Challenger'
-            : getDefaultBotName(idx),
-        isBot: idx > 0,
-        uid: null,
-        ready: true,
-      }));
       const fresh = createInitialMatchState(config.seed, {
-        playerCount: config.playerCount,
-        teamMode: config.teamMode,
-        players,
+        playerCount: 2,
+        teamMode: 'ffa',
+        players: [
+          {
+            name: authState.user ? authState.displayName : 'Challenger',
+            isBot: false,
+            uid: null,
+            ready: true,
+          },
+          {
+            name: getDefaultBotName(1),
+            isBot: true,
+            uid: null,
+            ready: true,
+          },
+        ],
       });
-      // Replace via RESET-like sync: initialize directly with custom config by resetting soloReducer state
-      // We handle custom solo configs by storing custom solo state or dispatching RESET_MATCH if same count.
-      setCustomSoloState({ match: fresh, history: [] });
+      setSoloState({ match: fresh, history: [] });
       setActiveMode('solo');
       setActiveMatchId(null);
       setScreen('arena');
@@ -140,37 +140,9 @@ export default function App() {
     [authState.user, authState.displayName],
   );
 
-  const [customSoloState, setCustomSoloState] = useState<SoloHistoryState | null>(null);
-  const effectiveSoloState = customSoloState ?? soloState;
-
-  const handleDispatchSolo = useCallback(
-    (action: MatchAction) => {
-      if (customSoloState) {
-        setCustomSoloState((prev) => (prev ? soloReducer(prev, action) : null));
-      } else {
-        dispatchSolo(action);
-      }
-    },
-    [customSoloState],
-  );
-
-  // Bot loop for customSoloState when active
-  useEffect(() => {
-    if (activeMode !== 'solo' || screen !== 'arena' || !customSoloState) return;
-    const { match } = customSoloState;
-    if (match.winner !== 'NONE') return;
-    const activePlayer = match.players[match.activeTurnIndex];
-    if (!activePlayer || !activePlayer.isBot) return;
-
-    const timer = window.setTimeout(() => {
-      const botAction = chooseBotAction(match);
-      if (botAction) {
-        setCustomSoloState((prev) => (prev ? soloReducer(prev, botAction) : null));
-      }
-    }, reducedMotion ? 150 : 600);
-
-    return () => window.clearTimeout(timer);
-  }, [activeMode, screen, customSoloState, reducedMotion]);
+  const handleDispatchSolo = useCallback((action: MatchAction) => {
+    setSoloState((prev) => soloReducer(prev, action));
+  }, []);
 
   const handleCreateMultiplayer = useCallback(
     async (config: CreateRoomConfig) => {
@@ -193,7 +165,7 @@ export default function App() {
         setScreen('arena');
       } catch (err) {
         setLobbyActionError(
-          err instanceof Error ? err.message : 'Unable to create multiplayer room.',
+          err instanceof Error ? err.message : 'Unable to create room.',
         );
       } finally {
         setCreatingMatch(false);
@@ -273,7 +245,7 @@ export default function App() {
         setScreen('lobby');
       }}
     >
-      <div className="min-h-screen text-stone-100 flex flex-col">
+      <div className="min-h-screen text-white flex flex-col">
         <Header
           screen={screen}
           hasActiveMatch={activeMode !== 'none'}
@@ -284,9 +256,7 @@ export default function App() {
           onOpenHowToPlay={() => setHowToPlayOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
           onAuthAction={handleHeaderAuthAction}
-          onQuickSolo={() =>
-            handleStartSolo({ seed: 202601, playerCount: 2, teamMode: 'ffa' })
-          }
+          onQuickSolo={() => handleStartSolo({ seed: 202601 })}
         />
 
         <div className="flex-1">
@@ -311,9 +281,9 @@ export default function App() {
           {screen === 'arena' && activeMode === 'solo' && (
             <Arena
               mode="solo"
-              state={effectiveSoloState.match}
+              state={soloState.match}
               localSeatIndex={0}
-              history={effectiveSoloState.history}
+              history={soloState.history}
               muted={muted}
               reducedMotion={reducedMotion}
               onToggleMuted={toggleMuted}
