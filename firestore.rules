@@ -27,212 +27,62 @@ service cloud.firestore {
       return uid is string && uid.size() >= 1 && uid.size() <= 128 && uid.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    function isValidRoomCode(code) {
-      return code is string && code.size() == 6 && code.matches('^[A-Z0-9]{6}$');
-    }
-
-    function isValidStatus(status) {
-      return status in ['waiting', 'active', 'finished'];
-    }
-
-    function isValidRealm(realm) {
-      return realm in ['SKY', 'NETHER', 'SEA', 'WAR'];
-    }
-
-    function isValidStat(stat) {
-      return stat in ['might', 'arcana', 'cunning', 'influence'];
-    }
-
-    function isValidSeatId(id) {
-      return id in ['p1', 'p2', 'p3', 'p4'];
-    }
-
     function isValidWinner(winner) {
       return winner in ['NONE', 'p1', 'p2', 'p3', 'p4', 'TEAM_0', 'TEAM_1', 'DRAW'];
     }
 
-    function isValidDeck(deck) {
-      return deck is list && deck.size() <= 60 && (deck.size() == 0 || (deck[0] is string && deck[0].size() <= 64));
+    function hasAllowedKeys(d) {
+      return d.keys().hasOnly([
+        'matchId', 'roomCode', 'status', 'hostUid', 'maxPlayers', 'fillWithBots',
+        'activePlayers', 'matchSeed', 'matchPreset', 'gameMode', 'round', 'maxRounds',
+        'teamMode', 'roundPhase', 'activeTurnIndex', 'activeRealm', 'players', 'warPot',
+        'pendingClash', 'gambitArmed', 'prophecyTarget', 'statWins', 'bestWin', 'winner',
+        'lastOutcome', 'turnStartedAt', 'createdAt', 'updatedAt'
+      ]);
     }
 
-    function isValidActivePlayers(players) {
-      return players is list
-        && players.size() <= 4
-        && (players.size() < 1 || isValidUid(players[0]))
-        && (players.size() < 2 || isValidUid(players[1]))
-        && (players.size() < 3 || isValidUid(players[2]))
-        && (players.size() < 4 || isValidUid(players[3]));
+    function canCreate(matchId) {
+      let d = incoming();
+      return isSignedIn()
+        && isValidId(matchId)
+        && hasAllowedKeys(d)
+        && d.matchId == matchId
+        && d.status == 'waiting'
+        && d.hostUid == request.auth.uid
+        && d.maxPlayers in [2, 3, 4]
+        && d.players is list
+        && d.players.size() == d.maxPlayers
+        && d.players[0].uid == request.auth.uid
+        && d.players[1].uid == null
+        && (d.players.size() < 3 || d.players[2].uid == null)
+        && (d.players.size() < 4 || d.players[3].uid == null)
+        && d.activePlayers.size() == 1
+        && d.activePlayers[0] == request.auth.uid
+        && d.round == 1
+        && d.winner == 'NONE'
+        && d.turnStartedAt == request.time
+        && d.createdAt == request.time
+        && d.updatedAt == request.time;
     }
 
-    function isValidSeatMap(seat, expectedIndex) {
-      return seat is map
-        && seat.keys().hasAll([
-          'id', 'seatIndex', 'name', 'isBot', 'uid', 'team',
-          'deck', 'score', 'resurrectionUsed', 'gambitUsed', 'eliminated',
-          'away', 'ready', 'roundsWon'
-        ])
-        && seat.keys().hasOnly([
-          'id', 'seatIndex', 'name', 'isBot', 'uid', 'team',
-          'deck', 'score', 'resurrectionUsed', 'gambitUsed', 'eliminated',
-          'away', 'ready', 'roundsWon'
-        ])
-        && isValidSeatId(seat.id)
-        && seat.seatIndex == expectedIndex
-        && seat.name is string && seat.name.size() >= 1 && seat.name.size() <= 64
-        && seat.isBot is bool
-        && (seat.uid == null || isValidUid(seat.uid))
-        && seat.team in [0, 1]
-        && isValidDeck(seat.deck)
-        && seat.score is int && seat.score >= 0 && seat.score <= 500
-        && seat.resurrectionUsed is bool
-        && seat.gambitUsed is bool
-        && seat.eliminated is bool
-        && seat.away is bool
-        && seat.ready is bool
-        && seat.roundsWon is int && seat.roundsWon >= 0 && seat.roundsWon <= 200;
-    }
-
-    function isValidPlayersList(players) {
-      return players is list
-        && players.size() >= 2
-        && players.size() <= 4
-        && isValidSeatMap(players[0], 0)
-        && isValidSeatMap(players[1], 1)
-        && (players.size() < 3 || isValidSeatMap(players[2], 2))
-        && (players.size() < 4 || isValidSeatMap(players[3], 3));
-    }
-
-    function isValidStatWins(sw) {
-      return sw is map
-        && sw.keys().hasAll(['might', 'arcana', 'cunning', 'influence'])
-        && sw.keys().hasOnly(['might', 'arcana', 'cunning', 'influence'])
-        && sw.might is int && sw.might >= 0 && sw.might <= 200
-        && sw.arcana is int && sw.arcana >= 0 && sw.arcana <= 200
-        && sw.cunning is int && sw.cunning >= 0 && sw.cunning <= 200
-        && sw.influence is int && sw.influence >= 0 && sw.influence <= 200;
-    }
-
-    function isValidProphecyTarget(pt) {
-      return pt == null || (
-        pt is map
-        && pt.keys().hasAll(['bySeat', 'targetSeat', 'stat', 'baseValue', 'effectiveValue'])
-        && pt.keys().hasOnly(['bySeat', 'targetSeat', 'stat', 'baseValue', 'effectiveValue'])
-        && pt.bySeat is int && pt.bySeat >= 0 && pt.bySeat <= 3
-        && pt.targetSeat is int && pt.targetSeat >= 0 && pt.targetSeat <= 3
-        && isValidStat(pt.stat)
-        && pt.baseValue is int && pt.baseValue >= 0 && pt.baseValue <= 500
-        && pt.effectiveValue is int && pt.effectiveValue >= 0 && pt.effectiveValue <= 500
-      );
-    }
-
-    function isValidBestWin(bw) {
-      return bw == null || (
-        bw is map
-        && bw.keys().hasAll(['cardId', 'playerId', 'stat', 'effectiveValue', 'round'])
-        && bw.keys().hasOnly(['cardId', 'playerId', 'stat', 'effectiveValue', 'round'])
-        && bw.cardId is string && bw.cardId.size() >= 1 && bw.cardId.size() <= 64
-        && isValidSeatId(bw.playerId)
-        && isValidStat(bw.stat)
-        && bw.effectiveValue is int && bw.effectiveValue >= 0 && bw.effectiveValue <= 500
-        && bw.round is int && bw.round >= 1 && bw.round <= 200
-      );
-    }
-
-    function isValidLastOutcome(outcome) {
-      return outcome == null || (
-        outcome is map
-        && outcome.keys().hasAll([
-          'round', 'leaderId', 'stat', 'entries', 'gambitActive',
-          'resurrectedPlayers', 'winnerId', 'tiedPlayerIds', 'potWon', 'potSizeAfter',
-          'pointsAwarded'
-        ])
-        && outcome.keys().hasOnly([
-          'round', 'leaderId', 'stat', 'entries', 'gambitActive',
-          'resurrectedPlayers', 'winnerId', 'tiedPlayerIds', 'potWon', 'potSizeAfter',
-          'pointsAwarded'
-        ])
-        && outcome.round is int && outcome.round >= 1 && outcome.round <= 200
-        && isValidSeatId(outcome.leaderId)
-        && isValidStat(outcome.stat)
-        && outcome.entries is list && outcome.entries.size() >= 2 && outcome.entries.size() <= 4
-        && outcome.gambitActive is bool
-        && outcome.resurrectedPlayers is list && outcome.resurrectedPlayers.size() <= 4
-        && (outcome.winnerId in ['p1', 'p2', 'p3', 'p4', 'TIE'])
-        && outcome.tiedPlayerIds is list && outcome.tiedPlayerIds.size() <= 4
-        && outcome.potWon is int && outcome.potWon >= 0 && outcome.potWon <= 60
-        && outcome.potSizeAfter is int && outcome.potSizeAfter >= 0 && outcome.potSizeAfter <= 60
-        && outcome.pointsAwarded is int && outcome.pointsAwarded >= 0 && outcome.pointsAwarded <= 120
-      );
-    }
-
-    function isValidPreset(preset) {
-      return preset in ['blitz', 'standard', 'classic'];
-    }
-
-    function isValidGameMode(mode) {
-      return mode in ['points', 'classic'];
-    }
-
-    function isValidRoundPhase(phase) {
-      return phase in ['attack', 'defend'];
-    }
-
-    function isValidPendingClash(pc) {
-      return pc == null || (
-        pc is map
-        && pc.keys().hasAll(['leaderSeat', 'stat', 'gambitActive', 'selections'])
-        && pc.keys().hasOnly(['leaderSeat', 'stat', 'gambitActive', 'selections'])
-        && pc.leaderSeat is int && pc.leaderSeat >= 0 && pc.leaderSeat <= 3
-        && isValidStat(pc.stat)
-        && pc.gambitActive is bool
-        && pc.selections is map
-        && pc.selections.keys().hasOnly(['p1', 'p2', 'p3', 'p4'])
-        && pc.selections.size() >= 1 && pc.selections.size() <= 4
-      );
-    }
-
-    function isValidMatch(data) {
-      return data.keys().hasAll([
-          'matchId', 'roomCode', 'status', 'hostUid', 'maxPlayers', 'fillWithBots',
-          'activePlayers', 'matchSeed', 'matchPreset', 'gameMode', 'round', 'maxRounds',
-          'teamMode', 'roundPhase', 'activeTurnIndex', 'activeRealm', 'players', 'warPot',
-          'gambitArmed', 'statWins', 'winner', 'turnStartedAt', 'createdAt', 'updatedAt'
-        ])
-        && data.keys().hasOnly([
-          'matchId', 'roomCode', 'status', 'hostUid', 'maxPlayers', 'fillWithBots',
-          'activePlayers', 'matchSeed', 'matchPreset', 'gameMode', 'round', 'maxRounds',
-          'teamMode', 'roundPhase', 'activeTurnIndex', 'activeRealm', 'players', 'warPot',
-          'pendingClash', 'gambitArmed', 'prophecyTarget', 'statWins', 'bestWin', 'winner',
-          'lastOutcome', 'turnStartedAt', 'createdAt', 'updatedAt'
-        ])
-        && isValidId(data.matchId)
-        && isValidRoomCode(data.roomCode)
-        && isValidStatus(data.status)
-        && isValidUid(data.hostUid)
-        && data.maxPlayers in [2, 3, 4]
-        && data.fillWithBots is bool
-        && isValidActivePlayers(data.activePlayers)
-        && data.matchSeed is int && data.matchSeed >= 0 && data.matchSeed <= 4294967295
-        && isValidPreset(data.matchPreset)
-        && isValidGameMode(data.gameMode)
-        && data.round is int && data.round >= 1 && data.round <= 200
-        && data.maxRounds is int && data.maxRounds >= 1 && data.maxRounds <= 200
-        && data.teamMode in ['ffa', 'teams']
-        && isValidRoundPhase(data.roundPhase)
-        && data.activeTurnIndex is int && data.activeTurnIndex >= 0 && data.activeTurnIndex < data.players.size()
-        && isValidRealm(data.activeRealm)
-        && isValidPlayersList(data.players)
-        && isValidDeck(data.warPot)
-        && (!('pendingClash' in data) || isValidPendingClash(data.pendingClash))
-        && data.gambitArmed is bool
-        && (!('prophecyTarget' in data) || isValidProphecyTarget(data.prophecyTarget))
-        && isValidStatWins(data.statWins)
-        && (!('bestWin' in data) || isValidBestWin(data.bestWin))
-        && isValidWinner(data.winner)
-        && (!('lastOutcome' in data) || isValidLastOutcome(data.lastOutcome))
-        && data.turnStartedAt is timestamp
-        && data.createdAt is timestamp
-        && data.updatedAt is timestamp;
+    function canUpdate(matchId) {
+      return isSignedIn()
+        && isValidId(matchId)
+        && incoming().updatedAt == request.time
+        && incoming().status in ['waiting', 'active', 'finished']
+        && isValidWinner(incoming().winner)
+        && incoming().players is list
+        && incoming().players.size() == existing().players.size()
+        && (
+          isJoinRoomAction()
+          || isRejoinActiveAction()
+          || isToggleReadyAction()
+          || isHostRoomManageAction()
+          || isHostStartAction()
+          || isGameplayAction()
+          || isHostRematchAction()
+          || isLeaveAction()
+        );
     }
 
     function isSeatedUid(data, uid) {
@@ -454,33 +304,9 @@ service cloud.firestore {
         || (request.auth.uid in resource.data.activePlayers)
       );
 
-      allow create: if isSignedIn()
-        && isValidId(matchId)
-        && isValidMatch(incoming())
-        && incoming().matchId == matchId
-        && incoming().hostUid == request.auth.uid
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+      allow create: if canCreate(matchId);
 
-      allow update: if isSignedIn()
-        && isValidId(matchId)
-        && isValidMatch(incoming())
-        && incoming().matchId == existing().matchId
-        && incoming().roomCode == existing().roomCode
-        && incoming().hostUid == existing().hostUid
-        && incoming().matchSeed == existing().matchSeed
-        && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
-        && (
-          isJoinRoomAction()
-          || isRejoinActiveAction()
-          || isToggleReadyAction()
-          || isHostRoomManageAction()
-          || isHostStartAction()
-          || isGameplayAction()
-          || isHostRematchAction()
-          || isLeaveAction()
-        );
+      allow update: if canUpdate(matchId);
 
       allow delete: if isSignedIn() && isValidId(matchId) && (
         (existing().activePlayers.size() <= 1 && (request.auth.uid in existing().activePlayers))
